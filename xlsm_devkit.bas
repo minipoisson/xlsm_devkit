@@ -7,6 +7,8 @@ Private Declare PtrSafe Function GetACP Lib "kernel32" () As Long
 Private Declare Function GetACP Lib "kernel32" () As Long
 #End If
 
+Private Const MODULE_NAME As String = "xlsm_devkit"
+
 ' NOTE: This module itself is NOT imported by ImportAllModules()
 ' because a module cannot delete or overwrite itself.
 
@@ -69,7 +71,7 @@ Sub ImportAllModules()
     On Error GoTo 0
     
     Dim thisModule As String
-    thisModule = Application.VBE.ActiveCodePane.CodeModule.Name
+    thisModule = MODULE_NAME
 
     Dim successCount As Long
     Dim failCount As Long

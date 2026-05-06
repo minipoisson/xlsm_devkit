@@ -21,7 +21,7 @@ Designed to support xlsm development workflows that combine the VBE (Visual Basi
 2. In Project Explorer, right-click the target VBA project and import `xlsm_devkit.bas`.
 3. Enable "Trust access to the VBA project object model" in Excel settings.
 4. Run `ExportAllModules` once and confirm that `src/` is created next to the workbook.
-5. Edit files in `src/*.bas` with VS Code, then run `ImportAllModules` while `xlsm_devkit` is selected in the VBE.
+5. Edit files in `src/*.bas` with VS Code, then run `ImportAllModules`.
 
 ### Exporting modules
 
@@ -30,15 +30,8 @@ Designed to support xlsm development workflows that combine the VBE (Visual Basi
 
 ### Importing modules
 
-> **Important prerequisite**
->
-> `ImportAllModules` uses `Application.VBE.ActiveCodePane` to obtain its own module name so that it can skip itself during import.  
-> Therefore, you must **open the VBE and select the `xlsm_devkit` module** before running the macro.  
-> If a different module or window is active, the self-skip logic will not work correctly.
-
-1. Open the VBE and select the `xlsm_devkit` module in the Project Explorer.
-2. Run the `ImportAllModules` macro.
-3. Files from `src/*.bas` are loaded into the project. Existing modules have their code replaced; new modules are added.
+1. Run the `ImportAllModules` macro.
+2. Files from `src/*.bas` are loaded into the project. Existing modules have their code replaced; new modules are added.
 
 ### Exporting sheet maps
 

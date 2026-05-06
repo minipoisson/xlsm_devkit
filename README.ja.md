@@ -19,7 +19,7 @@ VBE（Visual Basic Editor）と外部エディタ（VS Code など）を組み�
 2. プロジェクトエクスプローラーで対象プロジェクトを右クリックし、`ファイルのインポート` から `xlsm_devkit.bas` を読み込む。
 3. Excel の設定で「VBA プロジェクト オブジェクト モデルへのアクセスを信頼する」を有効にする。
 4. `ExportAllModules` を実行し、ブックと同じフォルダに `src/` が作成されることを確認する。
-5. VS Code などで `src/*.bas` を編集し、VBE で `xlsm_devkit` モジュールを選択した状態で `ImportAllModules` を実行する。
+5. VS Code などで `src/*.bas` を編集し、`ImportAllModules` を実行する。
 
 ### モジュールのエクスポート
 
@@ -28,15 +28,8 @@ VBE（Visual Basic Editor）と外部エディタ（VS Code など）を組み�
 
 ### モジュールのインポート
 
-> **前提条件（重要）**
->
-> `ImportAllModules` は `Application.VBE.ActiveCodePane` を使って自分自身のモジュール名を取得し、自身をスキップします。  
-> そのため、**VBE を開いた状態で `xlsm_devkit` モジュールを選択してから**マクロを実行してください。  
-> 別のモジュールやウィンドウがアクティブな状態では、スキップ対象を正しく判定できません。
-
-1. VBE を開き、プロジェクトエクスプローラーで `xlsm_devkit` モジュールを選択する。
-2. `ImportAllModules` マクロを実行する。
-3. `src/*.bas` がプロジェクトに読み込まれる。既存モジュールはコードが上書きされ、新規モジュールは追加される。
+1. `ImportAllModules` マクロを実行する。
+2. `src/*.bas` がプロジェクトに読み込まれる。既存モジュールはコードが上書きされ、新規モジュールは追加される。
 
 ### シートマップのエクスポート
 
