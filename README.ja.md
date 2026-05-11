@@ -10,6 +10,7 @@ VBE（Visual Basic Editor）と外部エディタ（VS Code など）を組み�
 | `ExportAllModules` | プロジェクト内の全モジュールを `src/*.bas` に書き出す（ANSI → UTF-8 変換） |
 | `ImportAllModules` | `src/*.bas` を VBA プロジェクトに読み込む（UTF-8 → ANSI 変換）。`xlsm_devkit` 自身はスキップ |
 | `ExportAllSheetMapsToMD` | 全シートのセル・図形・数式・スタイルを `sheet/*.md` に書き出す |
+| `ImportAllSheetMapsFromMD` | `sheet/*.md` からセル値・数式・スタイル・名前付き範囲・入力規則リスト・結合セルをワークブックに復元する |
 
 ## 使い方
 
@@ -36,6 +37,11 @@ VBE（Visual Basic Editor）と外部エディタ（VS Code など）を組み�
 1. `ExportAllSheetMapsToMD` マクロを実行する。
 2. ブックと同じフォルダの `sheet/` に各シートの Markdown ファイルが書き出される。
 
+### シートマップのインポート
+
+1. `ImportAllSheetMapsFromMD` マクロを実行する。
+2. `sheet/*.md` が順に読み込まれ、対応するシートにセル値・数式・背景色・文字色・フォントサイズ・入力規則リスト・名前付き範囲・結合セルが復元される。
+
 ## 前提条件
 
 ### VBA プロジェクト オブジェクト モデルへのアクセス
@@ -52,14 +58,14 @@ Excel の次の設定を有効にしてください。
 ### 文字コードについて
 
 VBA の `VBComponents.Export` / `VBComponents.Import` はシステムの ANSI コードページ（日本語環境では Shift_JIS）でファイルを読み書きします。  
-このモジュールでは ADODB.Stream と Win32 API `GetACP()` を使い、ディスク上のファイルを UTF-8 として保持しながら VBE との間で相互変換を行っています。
+このモジュールでは ADODB.Stream と Win32 API `GetACP()` を使い、ディスク上のファイルを BOM なし UTF-8 として保持しながら VBE との間で相互変換を行っています。
 
 ## ファイル構成
 
 ```
 <ブックと同じフォルダ>/
-  src/          # エクスポートされた .bas ファイル（UTF-8）
-  sheet/        # エクスポートされたシートマップ .md ファイル（UTF-8）
+  src/          # エクスポートされた .bas ファイル（BOM なし UTF-8）
+  sheet/        # エクスポートされたシートマップ .md ファイル（BOM なし UTF-8）
 ```
 
 ## 制約事項

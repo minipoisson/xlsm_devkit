@@ -12,6 +12,7 @@ Designed to support xlsm development workflows that combine the VBE (Visual Basi
 | `ExportAllModules` | Exports all VBA modules to `src/*.bas` (ANSI → UTF-8 conversion) |
 | `ImportAllModules` | Imports `src/*.bas` into the VBA project (UTF-8 → ANSI conversion). Skips `xlsm_devkit` itself |
 | `ExportAllSheetMapsToMD` | Exports cell values, shapes, formulas, and styles of all sheets to `sheet/*.md` |
+| `ImportAllSheetMapsFromMD` | Restores cell values, formulas, styles, named ranges, data-validation lists, and merged regions from `sheet/*.md` back into the workbook |
 
 ## Usage
 
@@ -38,6 +39,11 @@ Designed to support xlsm development workflows that combine the VBE (Visual Basi
 1. Run the `ExportAllSheetMapsToMD` macro.
 2. A Markdown file for each sheet is written to a `sheet/` folder next to the workbook.
 
+### Importing sheet maps
+
+1. Run the `ImportAllSheetMapsFromMD` macro.
+2. Each `sheet/*.md` file is read and applied to the corresponding sheet: cell values, formulas, background/foreground colors, font sizes, data-validation lists, named ranges, and merged regions are all restored.
+
 ## Prerequisites
 
 ### Trust access to the VBA project object model
@@ -54,14 +60,14 @@ Both export and import will fail if this setting is disabled.
 ### Character encoding
 
 VBA's `VBComponents.Export` / `VBComponents.Import` always use the system ANSI code page (e.g. Shift_JIS on Japanese Windows) when reading and writing files.  
-This module uses ADODB.Stream and the Win32 API `GetACP()` to keep files on disk in UTF-8 while transparently converting to and from ANSI for the VBE.
+This module uses ADODB.Stream and the Win32 API `GetACP()` to keep files on disk in BOM-less UTF-8 while transparently converting to and from ANSI for the VBE.
 
 ## File layout
 
 ```
 <workbook folder>/
-  src/          # Exported .bas files (UTF-8)
-  sheet/        # Exported sheet map .md files (UTF-8)
+  src/          # Exported .bas files (UTF-8, BOM-less)
+  sheet/        # Exported sheet map .md files (UTF-8, BOM-less)
 ```
 
 ## Limitations

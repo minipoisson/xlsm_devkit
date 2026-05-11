@@ -12,16 +12,20 @@ Private Const MODULE_NAME As String = "xlsm_devkit"
 ' NOTE: This module itself is NOT imported by ImportAllModules()
 ' because a module cannot delete or overwrite itself.
 
-Sub callExportAllModules()
+Public Sub callExportAllModules()
     ExportAllModules
 End Sub
 
-Sub callImportAllModules()
+Public Sub callImportAllModules()
     ImportAllModules
 End Sub
 
-Sub callExportAllSheetMapsToMD()
+Public Sub callExportAllSheetMapsToMD()
     ExportAllSheetMapsToMD
+End Sub
+
+Public Sub callImportAllSheetMapsFromMD()
+    ImportAllSheetMapsFromMD
 End Sub
 
 
@@ -37,23 +41,25 @@ Sub ExportAllModules()
     
     Dim dirPath As String
     dirPath = ThisWorkbook.Path & "\src"
-    If Dir(dirPath, vbDirectory) = "" Then
-        MkDir dirPath
+    Dim fso As Object
+    Set fso = CreateObject("Scripting.FileSystemObject")
+    If Not fso.FolderExists(dirPath) Then
+        fso.CreateFolder dirPath
     End If
-    
+
     Dim comp As Object, expPath As String
     For Each comp In ThisWorkbook.VBProject.VBComponents
         If comp.Type <> 3 Then
             expPath = ThisWorkbook.Path & "\src\" & comp.Name & ".bas"
-            If Dir(expPath) <> "" Then
+            If fso.FileExists(expPath) Then
                 If MsgBox("Overwrite the following file?" & vbLf & expPath, vbYesNo + vbDefaultButton2) = vbYes Then
-                    Kill expPath
+                    fso.DeleteFile expPath, True
                 Else
                     GoTo lblContinue
                 End If
             End If
             comp.Export expPath
-            ConvertEncoding ThisWorkbook.Path & "\src\" & comp.Name & ".bas", GetSystemAnsiCharset(), "UTF-8"
+            ConvertEncoding expPath, GetSystemAnsiCharset(), "UTF-8"
         End If
 lblContinue:
     Next
@@ -75,25 +81,36 @@ Sub ImportAllModules()
 
     Dim successCount As Long
     Dim failCount As Long
+    Dim fso As Object
+    Set fso = CreateObject("Scripting.FileSystemObject")
+    Dim srcFolder As Object
+    Dim srcFile As Object
     Dim fName As String
-    fName = Dir(ThisWorkbook.Path & "\src\*.bas")
+    Dim modName As String
 
-    Do While fName <> ""
-        Dim modName As String
+    Dim srcPath As String
+    srcPath = ThisWorkbook.Path & "\src"
+    If Not fso.FolderExists(srcPath) Then
+        MsgBox "Source folder not found: " & srcPath, vbExclamation
+        Exit Sub
+    End If
+    Set srcFolder = fso.GetFolder(srcPath)
+    For Each srcFile In srcFolder.Files
+        If LCase(fso.GetExtensionName(srcFile.Name)) <> "bas" Then GoTo lblContinue
+
+        fName = srcFile.Name
         modName = Left(fName, Len(fName) - 4)
 
-        If modName = thisModule Then
-            GoTo lblContinue:
-        End If
-        
+        If modName = thisModule Then GoTo lblContinue
+
         If ComponentExists(modName) Then
-            If ReplaceExistingComponentCodeFromFile(modName, ThisWorkbook.Path & "\src\" & fName) Then
+            If ReplaceExistingComponentCodeFromFile(modName, srcFile.Path) Then
                 successCount = successCount + 1
             Else
                 failCount = failCount + 1
             End If
         Else
-            If ImportNewComponentFromFile(ThisWorkbook.Path & "\src\" & fName) Then
+            If ImportNewComponentFromFile(srcFile.Path) Then
                 successCount = successCount + 1
             Else
                 failCount = failCount + 1
@@ -101,8 +118,7 @@ Sub ImportAllModules()
         End If
 
 lblContinue:
-        fName = Dir()
-    Loop
+    Next srcFile
 
     MsgBox "Import complete." & vbLf & _
            "Success: " & successCount & vbLf & _
@@ -113,21 +129,24 @@ End Sub
 Private Sub ConvertEncoding(filePath As String, fromCharset As String, toCharset As String)
     Dim st As Object
     Set st = CreateObject("ADODB.Stream")
-    
     st.Open
-    st.Type = 2  ' text
+    st.Type = 2
     st.Charset = fromCharset
     st.LoadFromFile filePath
     Dim content As String
     content = st.ReadText
     st.Close
-    
-    st.Open
-    st.Type = 2
-    st.Charset = toCharset
-    st.WriteText content
-    st.SaveToFile filePath, 2  ' overwrite
-    st.Close
+
+    If LCase(toCharset) = "utf-8" Then
+        SaveAsUTF8 filePath, content
+    Else
+        st.Open
+        st.Type = 2
+        st.Charset = toCharset
+        st.WriteText content
+        st.SaveToFile filePath, 2
+        st.Close
+    End If
 End Sub
 
 Private Function ReplaceExistingComponentCodeFromFile(modName As String, filePath As String) As Boolean
@@ -141,29 +160,32 @@ Private Function ReplaceExistingComponentCodeFromFile(modName As String, filePat
     Dim targetComp As Object
     Dim codeText As String
     
+    Dim fso As Object
+    Set fso = CreateObject("Scripting.FileSystemObject")
+
     On Error GoTo ErrHandler
-    
+
     ' Update existing code via a temporary module to avoid removing the target component.
-    FileCopy filePath, tempPath
+    fso.CopyFile filePath, tempPath
     RenameModuleInFile tempPath, modName, tempName
-    
+
     ' VBComponents.Import expects system ANSI encoding.
     ConvertEncoding tempPath, "UTF-8", GetSystemAnsiCharset()
     ThisWorkbook.VBProject.VBComponents.Import tempPath
-    If FileExists(tempPath) Then Kill tempPath
-    
+    If fso.FileExists(tempPath) Then fso.DeleteFile tempPath, True
+
     Set tempComp = ThisWorkbook.VBProject.VBComponents(tempName)
     If tempComp.CodeModule.CountOfLines > 0 Then
         codeText = tempComp.CodeModule.lines(1, tempComp.CodeModule.CountOfLines)
         codeText = StripAttributeLines(codeText)
     End If
-    
+
     Set targetComp = ThisWorkbook.VBProject.VBComponents(modName)
     With targetComp.CodeModule
         If .CountOfLines > 0 Then .DeleteLines 1, .CountOfLines
         If Len(codeText) > 0 Then .AddFromString codeText
     End With
-    
+
     ThisWorkbook.VBProject.VBComponents.Remove tempComp
     ReplaceExistingComponentCodeFromFile = True
     Exit Function
@@ -173,7 +195,7 @@ ErrHandler:
     If Not tempComp Is Nothing Then
         ThisWorkbook.VBProject.VBComponents.Remove tempComp
     End If
-    If FileExists(tempPath) Then Kill tempPath
+    If fso.FileExists(tempPath) Then fso.DeleteFile tempPath, True
     ReplaceExistingComponentCodeFromFile = False
 End Function
 
@@ -185,21 +207,24 @@ Private Function ImportNewComponentFromFile(filePath As String) As Boolean
     Dim backupPath As String
     backupPath = filePath & "_"
 
+    Dim fso As Object
+    Set fso = CreateObject("Scripting.FileSystemObject")
+
     On Error GoTo ErrHandler
 
-    FileCopy filePath, backupPath
+    fso.CopyFile filePath, backupPath
     ConvertEncoding filePath, "UTF-8", GetSystemAnsiCharset()
     ThisWorkbook.VBProject.VBComponents.Import filePath
-    Kill filePath
-    Name backupPath As filePath
+    fso.DeleteFile filePath, True
+    fso.MoveFile backupPath, filePath
     ImportNewComponentFromFile = True
     Exit Function
 
 ErrHandler:
     On Error Resume Next
-    If FileExists(backupPath) Then
-        If FileExists(filePath) Then Kill filePath
-        Name backupPath As filePath
+    If fso.FileExists(backupPath) Then
+        If fso.FileExists(filePath) Then fso.DeleteFile filePath, True
+        fso.MoveFile backupPath, filePath
     End If
     ImportNewComponentFromFile = False
 End Function
@@ -212,11 +237,6 @@ Private Function ComponentExists(modName As String) As Boolean
     On Error GoTo 0
 End Function
 
-Private Function FileExists(filePath As String) As Boolean
-    Dim fso As Object
-    Set fso = CreateObject("Scripting.FileSystemObject")
-    FileExists = fso.FileExists(filePath)
-End Function
 
 Private Function BuildUniqueTempModuleName(baseName As String) As String
     Dim candidate As String
@@ -288,10 +308,12 @@ Sub ExportAllSheetMapsToMD()
     Dim mdContent As String
     
     sheetFolderPath = ThisWorkbook.Path & "\sheet"
-    If Dir(sheetFolderPath, vbDirectory) = "" Then
-        MkDir sheetFolderPath
+    Dim fso As Object
+    Set fso = CreateObject("Scripting.FileSystemObject")
+    If Not fso.FolderExists(sheetFolderPath) Then
+        fso.CreateFolder sheetFolderPath
     End If
-    
+
     For Each ws In ThisWorkbook.Worksheets
         mdContent = GenerateSheetMapMarkdown(ws)
         
@@ -303,12 +325,38 @@ Sub ExportAllSheetMapsToMD()
     MsgBox "All sheet maps exported." & vbLf & "Saved to: " & sheetFolderPath, vbInformation
 End Sub
 
+Sub ImportAllSheetMapsFromMD()
+    Dim ws As Worksheet
+    Dim sheetFolderPath As String
+    Dim fileName As String
+    Dim mdContent As String
+
+    sheetFolderPath = ThisWorkbook.Path & "\sheet"
+    Dim fso As Object
+    Set fso = CreateObject("Scripting.FileSystemObject")
+    If Not fso.FolderExists(sheetFolderPath) Then
+        MsgBox "Sheet folder not found: " & sheetFolderPath, vbExclamation
+        Exit Sub
+    End If
+
+    For Each ws In ThisWorkbook.Worksheets
+        fileName = sheetFolderPath & "\" & ws.CodeName & ".md"
+        If fso.FileExists(fileName) Then
+            mdContent = ReadUTF8(fileName)
+            ApplySheetMapMarkdown ws, mdContent
+        End If
+    Next ws
+
+    MsgBox "All sheet maps imported.", vbInformation
+End Sub
+
 Private Function GenerateSheetMapMarkdown(ws As Worksheet) As String
     Dim rng As Range
     Dim mapText As String
     Dim role As String
     Dim cellName As String
     Dim styleParts As String
+    Dim mergeMarker As String
     
     mapText = "# Sheet Configuration" & vbCrLf
     mapText = mapText & "- VBA CodeName: " & ws.CodeName & vbCrLf
@@ -318,13 +366,48 @@ Private Function GenerateSheetMapMarkdown(ws As Worksheet) As String
     mapText = mapText & "| :--- | :--- | :--- | :--- | :--- |" & vbCrLf
     
     For Each rng In ws.UsedRange
-        If rng.value <> "" Or rng.HasFormula Or rng.Interior.ColorIndex <> xlNone Then
+        If rng.MergeCells And Not (rng.Row = rng.MergeArea.Row And rng.Column = rng.MergeArea.Column) Then
+            ' Slave cell in a merged range
             cellName = ""
             On Error Resume Next
             cellName = rng.Name.Name
             If cellName = "" Then cellName = "-"
             On Error GoTo 0
-            
+
+            If rng.Row = rng.MergeArea.Row Then
+                mergeMarker = "!merged_left"
+            ElseIf rng.Column = rng.MergeArea.Column Then
+                mergeMarker = "!merged_up"
+            Else
+                mergeMarker = "!merged_ul"
+            End If
+
+            styleParts = ""
+            If rng.Interior.ColorIndex <> xlNone Then
+                styleParts = "BG:" & ColorToHex(rng.Interior.Color)
+            End If
+            If rng.Font.ColorIndex <> xlColorIndexAutomatic And rng.Font.Color <> 0 Then
+                If styleParts <> "" Then styleParts = styleParts & "; "
+                styleParts = styleParts & "FG:" & ColorToHex(rng.Font.Color)
+            End If
+            If rng.Font.Size <> Application.StandardFontSize Then
+                If styleParts <> "" Then styleParts = styleParts & "; "
+                styleParts = styleParts & "FontSize:" & rng.Font.Size
+            End If
+
+            mapText = mapText & "| " & rng.Address(False, False) & _
+                      " | " & cellName & _
+                      " | " & mergeMarker & _
+                      " | -" & _
+                      " | " & IIf(styleParts = "", "-", styleParts) & " |" & vbCrLf
+        ElseIf rng.value <> "" Or rng.HasFormula Or rng.Interior.ColorIndex <> xlNone Then
+            ' Normal cell (or master cell of a merged range)
+            cellName = ""
+            On Error Resume Next
+            cellName = rng.Name.Name
+            If cellName = "" Then cellName = "-"
+            On Error GoTo 0
+
             styleParts = ""
             If rng.Interior.ColorIndex <> xlNone Then
                 styleParts = "BG:" & ColorToHex(rng.Interior.Color)
@@ -350,8 +433,8 @@ Private Function GenerateSheetMapMarkdown(ws As Worksheet) As String
                 If styleParts <> "" Then styleParts = styleParts & "; "
                 styleParts = styleParts & "List:" & Replace(valFormula, "|", ChrW(&HFF5C))
             End If
-            role = IIf(styleParts = "", "Normal", styleParts)
-            
+            role = IIf(styleParts = "", "-", styleParts)
+
             mapText = mapText & "| " & rng.Address(False, False) & _
                       " | " & cellName & _
                       " | " & EscapeCellValue(rng.value) & _
@@ -424,7 +507,7 @@ Private Function GenerateSheetMapMarkdown(ws As Worksheet) As String
                         " | " & IIf(shpLabel <> "", shpLabel, "-") & _
                         " | " & shpFormula & _
                         " | " & IIf(shpOnAction <> "", shpOnAction, "-") & _
-                        " | " & IIf(shpStyle <> "", shpStyle, "Normal") & " |" & vbCrLf
+                        " | " & IIf(shpStyle <> "", shpStyle, "-") & " |" & vbCrLf
         End If
 lblFinShp:
         Err.Clear
@@ -439,6 +522,109 @@ lblFinShp:
 
     GenerateSheetMapMarkdown = mapText
 End Function
+
+Private Sub ApplySheetMapMarkdown(ws As Worksheet, mdContent As String)
+    Dim normContent As String
+    Dim lines() As String
+    Dim i As Long
+    Dim line As String
+    Dim inCellTable As Boolean
+    Dim cols() As String
+    Dim addr As String
+    Dim cName As String
+    Dim cValue As String
+    Dim cFormula As String
+    Dim cStyle As String
+    Dim rng As Range
+    Dim fml As String
+    Dim refAddr As String
+    Dim mAddr As String
+    Dim slaveAddrs() As String
+    Dim masterAddrs() As String
+    Dim slaveCount As Long
+
+    ' Pre-clear cell data, formatting, merges, and validation
+    On Error Resume Next
+    ws.Cells.UnMerge
+    On Error GoTo 0
+    ws.Cells.ClearContents
+    ws.Cells.ClearFormats
+    On Error Resume Next
+    ws.Cells.Validation.Delete
+    On Error GoTo 0
+
+    ' Normalize line endings and split
+    normContent = Replace(mdContent, vbCrLf, vbLf)
+    normContent = Replace(normContent, vbCr, vbLf)
+    lines = Split(normContent, vbLf)
+
+    inCellTable = False
+    slaveCount = 0
+    ReDim slaveAddrs(UBound(lines))
+    ReDim masterAddrs(UBound(lines))
+
+    For i = 0 To UBound(lines)
+        line = Trim(lines(i))
+
+        If line = "## Shapes" Then Exit For
+
+        If Left(line, 10) = "| Address " Then
+            inCellTable = True
+        ElseIf inCellTable And Left(line, 1) = "|" And Left(line, 5) <> "| :-" Then
+            cols = ParseMDTableRow(line)
+            If UBound(cols) >= 4 Then
+                addr = Trim(cols(0))
+                cName = Trim(cols(1))
+                cValue = Trim(cols(2))
+                cFormula = Trim(cols(3))
+                cStyle = Trim(cols(4))
+
+                Set rng = Nothing
+                On Error Resume Next
+                Set rng = ws.Range(addr)
+                On Error GoTo 0
+
+                If Not rng Is Nothing Then
+                    If cValue = "!merged_left" Or cValue = "!merged_up" Or cValue = "!merged_ul" Then
+                        ' Slave cell: apply style and name, record for Pass 2
+                        ApplyCellStyle rng, cStyle
+                        If cName <> "-" Then ApplyCellName ws, rng, cName
+
+                        If cValue = "!merged_left" Then
+                            refAddr = ws.Cells(rng.Row, rng.Column - 1).Address(False, False)
+                        Else
+                            ' !merged_up or !merged_ul: follow upward to find master
+                            refAddr = ws.Cells(rng.Row - 1, rng.Column).Address(False, False)
+                        End If
+                        mAddr = ResolveMasterAddr(refAddr, slaveAddrs, masterAddrs, slaveCount)
+
+                        slaveAddrs(slaveCount) = addr
+                        masterAddrs(slaveCount) = mAddr
+                        slaveCount = slaveCount + 1
+                    Else
+                        ' Normal or master cell
+                        If cFormula <> "-" And cFormula <> "" Then
+                            fml = cFormula
+                            If Left(fml, 1) = "`" And Right(fml, 1) = "`" Then
+                                fml = Mid(fml, 2, Len(fml) - 2)
+                            End If
+                            On Error Resume Next
+                            rng.Formula = fml
+                            On Error GoTo 0
+                        ElseIf cValue <> "-" And cValue <> "" Then
+                            rng.Value = UnescapeCellValue(cValue)
+                        End If
+                        ApplyCellStyle rng, cStyle
+                        If cName <> "-" Then ApplyCellName ws, rng, cName
+                    End If
+                End If
+            End If
+        End If
+    Next i
+
+    ' Pass 2: reconstruct merged ranges
+    If slaveCount > 0 Then ReconstructMerges ws, slaveAddrs, masterAddrs, slaveCount
+End Sub
 
 Private Function EscapeCellValue(cellValue As String) As String
     Dim v As String
@@ -460,20 +646,156 @@ Private Function ColorToHex(colorVal As Long) As String
 End Function
 
 Private Sub SaveAsUTF8(filePath As String, content As String)
-    Dim st As Object
-    Set st = CreateObject("ADODB.Stream")
-    
-    st.Type = 2
-    st.Charset = "UTF-8"
-    st.Open
-    st.WriteText content
-    st.SaveToFile filePath, 2
-    st.Close
+    ' ADODB.Stream always prepends a 3-byte UTF-8 BOM; strip it via binary copy.
+    Dim stText As Object
+    Set stText = CreateObject("ADODB.Stream")
+    stText.Type = 2
+    stText.Charset = "UTF-8"
+    stText.Open
+    stText.WriteText content
+    stText.Position = 0
+    stText.Type = 1
+    stText.Position = 3    ' skip BOM (EF BB BF)
+
+    Dim stBin As Object
+    Set stBin = CreateObject("ADODB.Stream")
+    stBin.Type = 1
+    stBin.Open
+    stBin.Write stText.Read
+    stBin.SaveToFile filePath, 2
+    stBin.Close
+    stText.Close
 End Sub
 
 ' Returns the ADODB.Stream charset name matching the system ANSI code page.
 ' VBComponents.Export / Import always use the system ANSI code page,
 ' so this is used when converting between UTF-8 (on disk) and ANSI (for VBE).
+Private Function ReadUTF8(filePath As String) As String
+    Dim st As Object
+    Set st = CreateObject("ADODB.Stream")
+    st.Type = 2
+    st.Charset = "UTF-8"
+    st.Open
+    st.LoadFromFile filePath
+    ReadUTF8 = st.ReadText
+    st.Close
+End Function
+
+Private Function ParseMDTableRow(line As String) As String()
+    ' "| A1 | name | value | formula | style |" -> Array("A1","name","value","formula","style")
+    Dim s As String
+    s = line
+    If Left(s, 1) = "|" Then s = Mid(s, 2)
+    If Right(s, 1) = "|" Then s = Left(s, Len(s) - 1)
+    Dim parts() As String
+    parts = Split(s, "|")
+    Dim k As Integer
+    For k = 0 To UBound(parts)
+        parts(k) = Trim(parts(k))
+    Next k
+    ParseMDTableRow = parts
+End Function
+
+Private Function UnescapeCellValue(v As String) As String
+    ' Reverse of EscapeCellValue; use placeholder to avoid \n vs \\n ambiguity
+    Dim PH As String: PH = Chr(1)
+    v = Replace(v, ChrW(&HFF5C), "|")
+    v = Replace(v, "\\", PH)
+    v = Replace(v, "\n", vbLf)
+    v = Replace(v, PH, "\")
+    UnescapeCellValue = v
+End Function
+
+Private Function HexToRGB(hexStr As String) As Long
+    If Left(hexStr, 1) = "#" Then hexStr = Mid(hexStr, 2)
+    HexToRGB = RGB(CLng("&H" & Left(hexStr, 2)), CLng("&H" & Mid(hexStr, 3, 2)), CLng("&H" & Right(hexStr, 2)))
+End Function
+
+Private Sub ApplyCellStyle(rng As Range, styleStr As String)
+    If styleStr = "-" Or styleStr = "" Then Exit Sub
+    Dim parts() As String
+    parts = Split(styleStr, "; ")
+    Dim p As String
+    Dim k As Integer
+    For k = 0 To UBound(parts)
+        p = Trim(parts(k))
+        If Left(p, 3) = "BG:" Then
+            rng.Interior.Color = HexToRGB(Mid(p, 4))
+        ElseIf Left(p, 3) = "FG:" Then
+            rng.Font.Color = HexToRGB(Mid(p, 4))
+        ElseIf Left(p, 9) = "FontSize:" Then
+            rng.Font.Size = CDbl(Mid(p, 10))
+        ElseIf Left(p, 5) = "List:" Then
+            Dim listFml As String
+            listFml = Replace(Mid(p, 6), ChrW(&HFF5C), "|")
+            On Error Resume Next
+            rng.Validation.Delete
+            rng.Validation.Add Type:=xlValidateList, Formula1:=listFml
+            On Error GoTo 0
+        End If
+    Next k
+End Sub
+
+Private Sub ApplyCellName(ws As Worksheet, rng As Range, nameStr As String)
+    On Error Resume Next
+    Dim excl As Long
+    excl = InStr(nameStr, "!")
+    If excl > 0 Then
+        ' Sheet-scoped name (e.g. "Sheet1!myRange") -> add as local name on this sheet
+        ws.Names.Add Mid(nameStr, excl + 1), rng
+    Else
+        ' Workbook-scoped
+        ThisWorkbook.Names.Add nameStr, rng
+    End If
+    On Error GoTo 0
+End Sub
+
+Private Function ResolveMasterAddr(refAddr As String, slaveAddrs() As String, masterAddrs() As String, slaveCount As Long) As String
+    ' If refAddr is itself a slave, return its recorded master; otherwise refAddr is the master
+    Dim j As Long
+    For j = 0 To slaveCount - 1
+        If slaveAddrs(j) = refAddr Then
+            ResolveMasterAddr = masterAddrs(j)
+            Exit Function
+        End If
+    Next j
+    ResolveMasterAddr = refAddr
+End Function
+
+Private Sub ReconstructMerges(ws As Worksheet, slaveAddrs() As String, masterAddrs() As String, slaveCount As Long)
+    Dim processed() As Boolean
+    ReDim processed(slaveCount - 1)
+    Dim i As Long, j As Long
+    Dim mAddr As String
+    Dim masterRng As Range
+    Dim slvRng As Range
+    Dim minRow As Long, maxRow As Long, minCol As Long, maxCol As Long
+
+    For i = 0 To slaveCount - 1
+        If Not processed(i) Then
+            mAddr = masterAddrs(i)
+            Set masterRng = ws.Range(mAddr)
+            minRow = masterRng.Row
+            maxRow = masterRng.Row
+            minCol = masterRng.Column
+            maxCol = masterRng.Column
+
+            For j = 0 To slaveCount - 1
+                If masterAddrs(j) = mAddr Then
+                    Set slvRng = ws.Range(slaveAddrs(j))
+                    If slvRng.Row < minRow Then minRow = slvRng.Row
+                    If slvRng.Row > maxRow Then maxRow = slvRng.Row
+                    If slvRng.Column < minCol Then minCol = slvRng.Column
+                    If slvRng.Column > maxCol Then maxCol = slvRng.Column
+                    processed(j) = True
+                End If
+            Next j
+
+            ws.Range(ws.Cells(minRow, minCol), ws.Cells(maxRow, maxCol)).Merge
+        End If
+    Next i
+End Sub
+
 Private Function GetSystemAnsiCharset() As String
     Dim cp As Long
     cp = GetACP()
@@ -495,4 +817,5 @@ Private Function GetSystemAnsiCharset() As String
         Case Else: GetSystemAnsiCharset = "Windows-" & cp
     End Select
 End Function
+
 
