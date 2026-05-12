@@ -1,5 +1,7 @@
 # VBA Coding Guidelines for This Project
 
+> For git and release workflow, see [AGENT.md](AGENT.md).
+
 ## CRITICAL: Do NOT use legacy VBA file/directory functions
 
 This project runs in a **UNC path environment** (`\\server\share\...`).  
