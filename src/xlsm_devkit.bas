@@ -7,42 +7,48 @@ Private Declare PtrSafe Function GetACP Lib "kernel32" () As Long
 Private Declare Function GetACP Lib "kernel32" () As Long
 #End If
 
+' Core module. No dependencies on optional feature modules.
+' Entry points callable from feature modules:
+'   ExportAllModulesFormsSheetMaps - export all VBA modules, forms, and sheet maps to src/ and sheet/?
+'   ImportAllModulesFormsSheetMaps - import all VBA modules, forms, and sheet maps from src/ and sheet/?
+'   CallExportAllComponents  - export all VBA components and forms to src/
+'   CallImportAllComponents  - import all VBA components and forms from src/
+'   CallExportAllSheetMapsToMD - export all sheet maps to sheet/ as Markdown files
+'   CallImportAllSheetMapsFromMD - import all sheet maps from sheet/ Markdown files
+'   ExportSheetToMDFile(ws as Worksheet, filePath as String) - export a single sheet map to a specified Markdown file
+
 Private Const MODULE_NAME As String = "xlsm_devkit"
 
 ' NOTE: This module itself is NOT imported by ImportAllComponents()
 ' because a module cannot delete or overwrite itself.
 
-Public Sub exportAllModulesFormsSheetMaps()
+Public Sub ExportAllModulesFormsSheetMaps()
     If MsgBox("Export all modules, forms, and sheet maps to src/ and sheet/?", _
               vbYesNo + vbDefaultButton2) = vbNo Then Exit Sub
     ExportAllComponents True
     ExportAllSheetMapsToMD True
 End Sub
 
-Public Sub importAllModulesFormsSheetMaps()
+Public Sub ImportAllModulesFormsSheetMaps()
     If MsgBox("Import all modules, forms, and sheet maps from src/ and sheet/?", _
               vbYesNo + vbDefaultButton2) = vbNo Then Exit Sub
     ImportAllComponents True
     ImportAllSheetMapsFromMD True
 End Sub
 
-Public Sub ShowInsertDeleteForm()
-    frmInsertDelete.Show
+Public Sub CallExportAllComponents(Optional skipConfirm As Boolean = False)
+    ExportAllComponents skipConfirm
 End Sub
 
-Public Sub callExportAllComponents()
-    ExportAllComponents
-End Sub
-
-Public Sub callImportAllComponents()
+Public Sub CallImportAllComponents()
     ImportAllComponents
 End Sub
 
-Public Sub callExportAllSheetMapsToMD()
+Public Sub CallExportAllSheetMapsToMD()
     ExportAllSheetMapsToMD
 End Sub
 
-Public Sub callImportAllSheetMapsFromMD()
+Public Sub CallImportAllSheetMapsFromMD()
     ImportAllSheetMapsFromMD
 End Sub
 
@@ -97,28 +103,42 @@ Sub ImportAllComponents(Optional skipConfirm As Boolean = False)
         Exit Sub
     End If
 
-    Dim successCount As Long, failCount As Long
+    Dim successCount As Long, failCount As Long, skipCount As Long
+    ' Move capture is locked when either the registry state exists (Phase 1→2)
+    ' or frmMoveWait is still loaded (e.g. Import called from frmInstruction while
+    ' frmMoveWait is still on screen ? replacing Move.bas would reset the VBA runtime
+    ' and crash Excel because Move.bas is on the active call stack).
+    Dim isMoveLocked As Boolean
+    isMoveLocked = IsFormCurrentlyLoaded("frmMoveWait") Or _
+                   (Len(GetSetting("xlsm_devkit", "MoveCapture", "State", "")) > 0)
+
     Dim srcFile As Object, ext As String, compName As String
     For Each srcFile In fso.GetFolder(srcPath).Files
         ext = LCase(fso.GetExtensionName(srcFile.Name))
         compName = Left(srcFile.Name, Len(srcFile.Name) - Len(ext) - 1)
         If ext = "bas" Then
-            If compName = MODULE_NAME Then GoTo lblNext
+            If compName = MODULE_NAME Then GoTo lblNext              ' xlsm_devkit (self)
+            If compName = "Move" And isMoveLocked Then               ' Move on call stack
+                skipCount = skipCount + 1: GoTo lblNext
+            End If
             If ComponentExists(compName) Then
                 If ReplaceExistingComponentCodeFromFile(compName, srcFile.Path) Then successCount = successCount + 1 Else failCount = failCount + 1
             Else
                 If ImportNewComponentFromFile(srcFile.Path) Then successCount = successCount + 1 Else failCount = failCount + 1
             End If
         ElseIf ext = "frm" Then
+            If IsFormCurrentlyLoaded(compName) Then                  ' skip any loaded form
+                skipCount = skipCount + 1: GoTo lblNext
+            End If
             If ImportForm(compName, srcFile.Path) Then successCount = successCount + 1 Else failCount = failCount + 1
         End If
 lblNext:
     Next srcFile
 
-    MsgBox "Import complete." & vbLf & _
-           "Success: " & successCount & vbLf & _
-           "Failed: " & failCount, _
-           IIf(failCount = 0, vbInformation, vbExclamation)
+    Dim msg As String
+    msg = "Import complete." & vbLf & "Success: " & successCount & vbLf & "Failed: " & failCount
+    If skipCount > 0 Then msg = msg & vbLf & "Skipped (in use): " & skipCount
+    MsgBox msg, IIf(failCount = 0, vbInformation, vbExclamation)
 End Sub
 
 Private Sub ConvertEncoding(filePath As String, fromCharset As String, toCharset As String)
@@ -222,6 +242,13 @@ ErrHandler:
         fso.MoveFile backupPath, filePath
     End If
     ImportNewComponentFromFile = False
+End Function
+
+Private Function IsFormCurrentlyLoaded(formName As String) As Boolean
+    Dim frm As Object
+    For Each frm In VBA.UserForms
+        If frm.Name = formName Then IsFormCurrentlyLoaded = True: Exit Function
+    Next frm
 End Function
 
 Private Function ComponentExists(modName As String) As Boolean
@@ -908,5 +935,3 @@ Private Function GetSystemAnsiCharset() As String
         Case Else: GetSystemAnsiCharset = "Windows-" & cp
     End Select
 End Function
-
-

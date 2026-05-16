@@ -15,6 +15,9 @@ Attribute VB_PredeclaredId = True
 Attribute VB_Exposed = False
 Option Explicit
 
+' Part of the InsertDelete feature.
+' Requires: InsertDelete.bas (RunInsertDelete)
+
 Private m_selectedSheet As Worksheet
 Private m_isValidN      As Boolean
 Private m_isRowMode     As Boolean
@@ -23,17 +26,6 @@ Private m_syncLock      As Boolean
 
 Private Sub UserForm_Initialize()
     Dim ws As Object
-    For Each ws In ThisWorkbook.Sheets
-        If ws.Type = xlWorksheet Then
-            cboCodeName.AddItem ws.codeName
-            cboSheetName.AddItem ws.Name
-        End If
-    Next ws
-
-    optInsert.Value = True
-    txtCount.text = "1"
-    spnCount.Min = 1
-    spnCount.Max = 9999
     spnCount.Value = 1
 
     m_isValidN = False
@@ -45,16 +37,6 @@ Private Sub cboCodeName_Change()
     If m_syncLock Then Exit Sub
     m_syncLock = True
 
-    Dim i As Long
-    For i = 0 To cboCodeName.ListCount - 1
-        If cboCodeName.List(i) = cboCodeName.text Then
-            cboSheetName.ListIndex = i
-            Exit For
-        End If
-    Next i
-
-    Set m_selectedSheet = Nothing
-    Dim ws As Object
     For Each ws In ThisWorkbook.Sheets
         If ws.Type = xlWorksheet And ws.codeName = cboCodeName.text Then
             Set m_selectedSheet = ws
@@ -65,17 +47,6 @@ Private Sub cboCodeName_Change()
     m_syncLock = False
     UpdateBtnOK
 End Sub
-
-Private Sub cboSheetName_Change()
-    If m_syncLock Then Exit Sub
-    m_syncLock = True
-
-    Dim i As Long
-    For i = 0 To cboSheetName.ListCount - 1
-        If cboSheetName.List(i) = cboSheetName.text Then
-            cboCodeName.ListIndex = i
-            Exit For
-        End If
     Next i
 
     Set m_selectedSheet = Nothing
@@ -249,4 +220,19 @@ End Sub
 Private Sub UpdateBtnOK()
     btnOK.Enabled = (Not m_selectedSheet Is Nothing) And m_isValidN
 End Sub
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 

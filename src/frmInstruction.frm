@@ -15,6 +15,9 @@ Attribute VB_PredeclaredId = True
 Attribute VB_Exposed = False
 Option Explicit
 
+' Shared result/import dialog used by InsertDelete and Move features.
+' Requires: xlsm_devkit.bas (ImportAllComponents)
+
 Private Sub btnCopy_Click()
     Dim obj As MSForms.DataObject
     Set obj = New MSForms.DataObject
@@ -43,4 +46,18 @@ End Sub
 Private Sub btnClose_Click()
     Unload Me
 End Sub
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 

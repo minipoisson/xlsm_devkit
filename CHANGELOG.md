@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-05-13
+
+### Added
+- `ExportAllForms` — exports all UserForms (`comp.Type = 3`) to `src/*.frm` (ANSI → UTF-8); companion `*.frx` binary files are written as-is by VBE
+- `ImportAllForms` — imports `src/*.frm` into the VBA project (UTF-8 → ANSI), replacing both the designer and code by removing and re-importing each form; the `*.frx` binary in the same folder is picked up automatically by VBE
+- `callExportAllForms` / `callImportAllForms` — public entry-point wrappers
+
 ## [1.1.0] - 2026-05-12
 
 ### Added

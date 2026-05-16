@@ -1,6 +1,20 @@
 Attribute VB_Name = "InsertDelete"
 Option Explicit
 
+' Optional feature: insert or delete rows/columns with sheet-map snapshots.
+' Requires the following files in the same VBA project:
+'   xlsm_devkit.bas         - CallExportAllComponents, ExportSheetToMDFile
+'   frmInsertDelete.frm/frx - setup dialog (shown by ShowInsertDeleteForm)
+'   frmInstruction.frm/frx  - result/import dialog (shown by RunInsertDelete)
+' Entry point: ShowInsertDeleteForm
+
+Public Sub ShowInsertDeleteForm()
+    If MsgBox("Export all modules, and forms to src/ and sheet/?", _
+              vbYesNo + vbDefaultButton2) = vbNo Then Exit Sub
+    CallExportAllComponents True
+    frmInsertDelete.Show
+End Sub
+
 Public Sub RunInsertDelete( _
     ws As Worksheet, _
     startPos As String, _
@@ -215,4 +229,3 @@ Private Function BuildInstructionText( _
 
     BuildInstructionText = t
 End Function
-

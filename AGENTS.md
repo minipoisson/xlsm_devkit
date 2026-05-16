@@ -66,11 +66,16 @@ Prefer late binding (`CreateObject`) so the code does not require a reference ad
 
 ---
 
-## Git commit and push
+## Git commit
 
 - Stage all modified and untracked files that are **not excluded by `.gitignore`**.
-- Commit with a concise message, then push to `origin main`.
+- Commit with a concise message to the local repository.
 - Do **not** stage files listed in `.gitignore`.
+
+## Pushing to GitHub
+
+- Push to `origin main` **only when explicitly asked by the user**.
+- Do not push automatically after every commit.
 
 ## Release management
 
