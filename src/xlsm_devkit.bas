@@ -9,22 +9,20 @@ Private Declare Function GetACP Lib "kernel32" () As Long
 
 Private Const MODULE_NAME As String = "xlsm_devkit"
 
-' NOTE: This module itself is NOT imported by ImportAllModules()
+' NOTE: This module itself is NOT imported by ImportAllComponents()
 ' because a module cannot delete or overwrite itself.
 
 Public Sub exportAllModulesFormsSheetMaps()
     If MsgBox("Export all modules, forms, and sheet maps to src/ and sheet/?", _
               vbYesNo + vbDefaultButton2) = vbNo Then Exit Sub
-    ExportAllModules True
-    ExportAllForms True
+    ExportAllComponents True
     ExportAllSheetMapsToMD True
 End Sub
 
 Public Sub importAllModulesFormsSheetMaps()
     If MsgBox("Import all modules, forms, and sheet maps from src/ and sheet/?", _
               vbYesNo + vbDefaultButton2) = vbNo Then Exit Sub
-    ImportAllModules True
-    ImportAllForms True
+    ImportAllComponents True
     ImportAllSheetMapsFromMD True
 End Sub
 
@@ -32,20 +30,12 @@ Public Sub ShowInsertDeleteForm()
     frmInsertDelete.Show
 End Sub
 
-Public Sub callExportAllModules()
-    ExportAllModules
+Public Sub callExportAllComponents()
+    ExportAllComponents
 End Sub
 
-Public Sub callImportAllModules()
-    ImportAllModules
-End Sub
-
-Public Sub callExportAllForms()
-    ExportAllForms
-End Sub
-
-Public Sub callImportAllForms()
-    ImportAllForms
+Public Sub callImportAllComponents()
+    ImportAllComponents
 End Sub
 
 Public Sub callExportAllSheetMapsToMD()
@@ -57,95 +47,72 @@ Public Sub callImportAllSheetMapsFromMD()
 End Sub
 
 
-Sub ExportAllModules(Optional skipConfirm As Boolean = False)
+Private Function CheckVBProjectAccess() As Boolean
     On Error Resume Next
     Dim test As Object
     Set test = ThisWorkbook.VBProject
     If Err.Number <> 0 Then
         MsgBox "Please enable 'Trust access to the VBA project object model' in Excel macro settings."
-        Exit Sub
+        Exit Function
     End If
     On Error GoTo 0
+    CheckVBProjectAccess = True
+End Function
 
+Sub ExportAllComponents(Optional skipConfirm As Boolean = False)
+    If Not CheckVBProjectAccess() Then Exit Sub
     If Not skipConfirm Then
-        If MsgBox("Export all VBA modules to src/?", vbYesNo + vbDefaultButton2) = vbNo Then Exit Sub
+        If MsgBox("Export all modules and forms to src/?", vbYesNo + vbDefaultButton2) = vbNo Then Exit Sub
     End If
 
-    Dim dirPath As String
-    dirPath = ThisWorkbook.Path & "\src"
-    Dim fso As Object
-    Set fso = CreateObject("Scripting.FileSystemObject")
-    If Not fso.FolderExists(dirPath) Then
-        fso.CreateFolder dirPath
-    End If
+    Dim dirPath As String: dirPath = ThisWorkbook.Path & "\src"
+    Dim fso As Object: Set fso = CreateObject("Scripting.FileSystemObject")
+    If Not fso.FolderExists(dirPath) Then fso.CreateFolder dirPath
 
-    Dim comp As Object, expPath As String
+    Dim comp As Object, expPath As String, frxPath As String
     For Each comp In ThisWorkbook.VBProject.VBComponents
-        If comp.Type <> 3 Then
-            expPath = ThisWorkbook.Path & "\src\" & comp.Name & ".bas"
-            comp.Export expPath
-            ConvertEncoding expPath, GetSystemAnsiCharset(), "UTF-8"
+        If comp.Type = 3 Then
+            expPath = dirPath & "\" & comp.Name & ".frm"
+            frxPath = dirPath & "\" & comp.Name & ".frx"
+            If fso.FileExists(frxPath) Then fso.DeleteFile frxPath, True
+        Else
+            expPath = dirPath & "\" & comp.Name & ".bas"
         End If
+        comp.Export expPath
+        ConvertEncoding expPath, GetSystemAnsiCharset(), "UTF-8"
     Next
     MsgBox "Export complete."
 End Sub
 
-Sub ImportAllModules(Optional skipConfirm As Boolean = False)
-    On Error Resume Next
-    Dim test As Object
-    Set test = ThisWorkbook.VBProject
-    If Err.Number <> 0 Then
-        MsgBox "Please enable 'Trust access to the VBA project object model' in Excel macro settings."
-        Exit Sub
-    End If
-    On Error GoTo 0
-
+Sub ImportAllComponents(Optional skipConfirm As Boolean = False)
+    If Not CheckVBProjectAccess() Then Exit Sub
     If Not skipConfirm Then
-        If MsgBox("Import all VBA modules from src/?", vbYesNo + vbDefaultButton2) = vbNo Then Exit Sub
+        If MsgBox("Import all modules and forms from src/?", vbYesNo + vbDefaultButton2) = vbNo Then Exit Sub
     End If
 
-    Dim thisModule As String
-    thisModule = MODULE_NAME
-
-    Dim successCount As Long
-    Dim failCount As Long
-    Dim fso As Object
-    Set fso = CreateObject("Scripting.FileSystemObject")
-    Dim srcFolder As Object
-    Dim srcFile As Object
-    Dim fName As String
-    Dim modName As String
-
-    Dim srcPath As String
-    srcPath = ThisWorkbook.Path & "\src"
+    Dim fso As Object: Set fso = CreateObject("Scripting.FileSystemObject")
+    Dim srcPath As String: srcPath = ThisWorkbook.Path & "\src"
     If Not fso.FolderExists(srcPath) Then
         MsgBox "Source folder not found: " & srcPath, vbExclamation
         Exit Sub
     End If
-    Set srcFolder = fso.GetFolder(srcPath)
-    For Each srcFile In srcFolder.Files
-        If LCase(fso.GetExtensionName(srcFile.Name)) <> "bas" Then GoTo lblContinue
 
-        fName = srcFile.Name
-        modName = Left(fName, Len(fName) - 4)
-
-        If modName = thisModule Then GoTo lblContinue
-
-        If ComponentExists(modName) Then
-            If ReplaceExistingComponentCodeFromFile(modName, srcFile.Path) Then
-                successCount = successCount + 1
+    Dim successCount As Long, failCount As Long
+    Dim srcFile As Object, ext As String, compName As String
+    For Each srcFile In fso.GetFolder(srcPath).Files
+        ext = LCase(fso.GetExtensionName(srcFile.Name))
+        compName = Left(srcFile.Name, Len(srcFile.Name) - Len(ext) - 1)
+        If ext = "bas" Then
+            If compName = MODULE_NAME Then GoTo lblNext
+            If ComponentExists(compName) Then
+                If ReplaceExistingComponentCodeFromFile(compName, srcFile.Path) Then successCount = successCount + 1 Else failCount = failCount + 1
             Else
-                failCount = failCount + 1
+                If ImportNewComponentFromFile(srcFile.Path) Then successCount = successCount + 1 Else failCount = failCount + 1
             End If
-        Else
-            If ImportNewComponentFromFile(srcFile.Path) Then
-                successCount = successCount + 1
-            Else
-                failCount = failCount + 1
-            End If
+        ElseIf ext = "frm" Then
+            If ImportForm(compName, srcFile.Path) Then successCount = successCount + 1 Else failCount = failCount + 1
         End If
-
-lblContinue:
+lblNext:
     Next srcFile
 
     MsgBox "Import complete." & vbLf & _
@@ -327,95 +294,6 @@ Private Sub RenameModuleInFile(filePath As String, oldName As String, newName As
     st.WriteText content
     st.SaveToFile filePath, 2
     st.Close
-End Sub
-
-Sub ExportAllForms(Optional skipConfirm As Boolean = False)
-    On Error Resume Next
-    Dim test As Object
-    Set test = ThisWorkbook.VBProject
-    If Err.Number <> 0 Then
-        MsgBox "Please enable 'Trust access to the VBA project object model' in Excel macro settings."
-        Exit Sub
-    End If
-    On Error GoTo 0
-
-    If Not skipConfirm Then
-        If MsgBox("Export all forms to src/?", vbYesNo + vbDefaultButton2) = vbNo Then Exit Sub
-    End If
-
-    Dim dirPath As String
-    dirPath = ThisWorkbook.Path & "\src"
-    Dim fso As Object
-    Set fso = CreateObject("Scripting.FileSystemObject")
-    If Not fso.FolderExists(dirPath) Then
-        fso.CreateFolder dirPath
-    End If
-
-    Dim comp As Object
-    Dim expPath As String
-    Dim frxPath As String
-    For Each comp In ThisWorkbook.VBProject.VBComponents
-        If comp.Type = 3 Then
-            expPath = dirPath & "\" & comp.Name & ".frm"
-            frxPath = dirPath & "\" & comp.Name & ".frx"
-            If fso.FileExists(frxPath) Then fso.DeleteFile frxPath, True
-            comp.Export expPath
-            ConvertEncoding expPath, GetSystemAnsiCharset(), "UTF-8"
-        End If
-    Next
-    MsgBox "Form export complete."
-End Sub
-
-Sub ImportAllForms(Optional skipConfirm As Boolean = False)
-    On Error Resume Next
-    Dim test As Object
-    Set test = ThisWorkbook.VBProject
-    If Err.Number <> 0 Then
-        MsgBox "Please enable 'Trust access to the VBA project object model' in Excel macro settings."
-        Exit Sub
-    End If
-    On Error GoTo 0
-
-    If Not skipConfirm Then
-        If MsgBox("Import all forms from src/?", vbYesNo + vbDefaultButton2) = vbNo Then Exit Sub
-    End If
-
-    Dim successCount As Long
-    Dim failCount As Long
-    Dim fso As Object
-    Set fso = CreateObject("Scripting.FileSystemObject")
-
-    Dim srcPath As String
-    srcPath = ThisWorkbook.Path & "\src"
-    If Not fso.FolderExists(srcPath) Then
-        MsgBox "Source folder not found: " & srcPath, vbExclamation
-        Exit Sub
-    End If
-
-    Dim srcFolder As Object
-    Set srcFolder = fso.GetFolder(srcPath)
-    Dim srcFile As Object
-    Dim fName As String
-    Dim formName As String
-    For Each srcFile In srcFolder.Files
-        If LCase(fso.GetExtensionName(srcFile.Name)) <> "frm" Then GoTo lblContinue
-
-        fName = srcFile.Name
-        formName = Left(fName, Len(fName) - 4)
-
-        If ImportForm(formName, srcFile.Path) Then
-            successCount = successCount + 1
-        Else
-            failCount = failCount + 1
-        End If
-
-lblContinue:
-    Next srcFile
-
-    MsgBox "Form import complete." & vbLf & _
-           "Success: " & successCount & vbLf & _
-           "Failed: " & failCount, _
-           IIf(failCount = 0, vbInformation, vbExclamation)
 End Sub
 
 Private Function ImportForm(formName As String, frmPath As String) As Boolean

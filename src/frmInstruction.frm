@@ -30,7 +30,7 @@ Private Sub btnImport_Click()
     End If
 
     On Error GoTo ErrHandler
-    ImportAllModules True
+    ImportAllComponents True
     If MsgBox("Code has been imported.", vbOKOnly + vbInformation) = vbOK Then
         Unload Me
     End If
