@@ -1,4 +1,7 @@
 *.xlsm
 *.xlsx
-src/
+src/old/
+src/ThisWorkbook.bas
+src/Module*.bas
+src/Sheet*.bas
 sheet/

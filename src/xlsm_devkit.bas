@@ -12,12 +12,36 @@ Private Const MODULE_NAME As String = "xlsm_devkit"
 ' NOTE: This module itself is NOT imported by ImportAllModules()
 ' because a module cannot delete or overwrite itself.
 
+Public Sub exportAllModulesFormsSheetMaps()
+    ExportAllModules
+    ExportAllForms
+    ExportAllSheetMapsToMD
+End Sub
+
+Public Sub importAllModulesFormsSheetMaps()
+    ImportAllModules
+    ImportAllForms
+    ImportAllSheetMapsFromMD
+End Sub
+
+Public Sub ShowInsertDeleteForm()
+    frmInsertDelete.Show
+End Sub
+
 Public Sub callExportAllModules()
     ExportAllModules
 End Sub
 
 Public Sub callImportAllModules()
     ImportAllModules
+End Sub
+
+Public Sub callExportAllForms()
+    ExportAllForms
+End Sub
+
+Public Sub callImportAllForms()
+    ImportAllForms
 End Sub
 
 Public Sub callExportAllSheetMapsToMD()
@@ -301,6 +325,179 @@ Private Sub RenameModuleInFile(filePath As String, oldName As String, newName As
     st.Close
 End Sub
 
+Sub ExportAllForms()
+    On Error Resume Next
+    Dim test As Object
+    Set test = ThisWorkbook.VBProject
+    If Err.Number <> 0 Then
+        MsgBox "Please enable 'Trust access to the VBA project object model' in Excel macro settings."
+        Exit Sub
+    End If
+    On Error GoTo 0
+
+    Dim dirPath As String
+    dirPath = ThisWorkbook.Path & "\src"
+    Dim fso As Object
+    Set fso = CreateObject("Scripting.FileSystemObject")
+    If Not fso.FolderExists(dirPath) Then
+        fso.CreateFolder dirPath
+    End If
+
+    Dim comp As Object
+    Dim expPath As String
+    Dim frxPath As String
+    For Each comp In ThisWorkbook.VBProject.VBComponents
+        If comp.Type = 3 Then
+            expPath = dirPath & "\" & comp.Name & ".frm"
+            If fso.FileExists(expPath) Then
+                If MsgBox("Overwrite the following file?" & vbLf & expPath, vbYesNo + vbDefaultButton2) = vbYes Then
+                    fso.DeleteFile expPath, True
+                    frxPath = dirPath & "\" & comp.Name & ".frx"
+                    If fso.FileExists(frxPath) Then fso.DeleteFile frxPath, True
+                Else
+                    GoTo lblContinue
+                End If
+            End If
+            comp.Export expPath
+            ConvertEncoding expPath, GetSystemAnsiCharset(), "UTF-8"
+        End If
+lblContinue:
+    Next
+    MsgBox "Form export complete."
+End Sub
+
+Sub ImportAllForms()
+    On Error Resume Next
+    Dim test As Object
+    Set test = ThisWorkbook.VBProject
+    If Err.Number <> 0 Then
+        MsgBox "Please enable 'Trust access to the VBA project object model' in Excel macro settings."
+        Exit Sub
+    End If
+    On Error GoTo 0
+
+    Dim successCount As Long
+    Dim failCount As Long
+    Dim fso As Object
+    Set fso = CreateObject("Scripting.FileSystemObject")
+
+    Dim srcPath As String
+    srcPath = ThisWorkbook.Path & "\src"
+    If Not fso.FolderExists(srcPath) Then
+        MsgBox "Source folder not found: " & srcPath, vbExclamation
+        Exit Sub
+    End If
+
+    Dim srcFolder As Object
+    Set srcFolder = fso.GetFolder(srcPath)
+    Dim srcFile As Object
+    Dim fName As String
+    Dim formName As String
+    For Each srcFile In srcFolder.Files
+        If LCase(fso.GetExtensionName(srcFile.Name)) <> "frm" Then GoTo lblContinue
+
+        fName = srcFile.Name
+        formName = Left(fName, Len(fName) - 4)
+
+        If ImportForm(formName, srcFile.Path) Then
+            successCount = successCount + 1
+        Else
+            failCount = failCount + 1
+        End If
+
+lblContinue:
+    Next srcFile
+
+    MsgBox "Form import complete." & vbLf & _
+           "Success: " & successCount & vbLf & _
+           "Failed: " & failCount, _
+           IIf(failCount = 0, vbInformation, vbExclamation)
+End Sub
+
+Private Function ImportForm(formName As String, frmPath As String) As Boolean
+    If ComponentExists(formName) Then
+        ImportForm = ReplaceExistingFormCodeFromFile(formName, frmPath)
+    Else
+        ImportForm = ImportNewComponentFromFile(frmPath)
+    End If
+End Function
+
+Private Function ReplaceExistingFormCodeFromFile(formName As String, frmPath As String) As Boolean
+    Dim tempName As String
+    tempName = BuildUniqueTempModuleName(formName)
+
+    Dim fso As Object
+    Set fso = CreateObject("Scripting.FileSystemObject")
+
+    Dim srcDir As String
+    srcDir = fso.GetParentFolderName(frmPath)
+
+    Dim tempFrmPath As String
+    tempFrmPath = srcDir & "\" & tempName & ".frm"
+    Dim frxPath As String
+    frxPath = srcDir & "\" & formName & ".frx"
+    Dim tempFrxPath As String
+    tempFrxPath = srcDir & "\" & tempName & ".frx"
+
+    Dim tempComp As Object
+    Dim codeText As String
+
+    On Error GoTo ErrHandler
+
+    fso.CopyFile frmPath, tempFrmPath
+    RenameModuleInFile tempFrmPath, formName, tempName
+    RenameFormBeginInFile tempFrmPath, formName, tempName
+    If fso.FileExists(frxPath) Then fso.CopyFile frxPath, tempFrxPath
+
+    ConvertEncoding tempFrmPath, "UTF-8", GetSystemAnsiCharset()
+    ThisWorkbook.VBProject.VBComponents.Import tempFrmPath
+
+    If fso.FileExists(tempFrmPath) Then fso.DeleteFile tempFrmPath, True
+    If fso.FileExists(tempFrxPath) Then fso.DeleteFile tempFrxPath, True
+
+    Set tempComp = ThisWorkbook.VBProject.VBComponents(tempName)
+    If tempComp.CodeModule.CountOfLines > 0 Then
+        codeText = tempComp.CodeModule.lines(1, tempComp.CodeModule.CountOfLines)
+        codeText = StripAttributeLines(codeText)
+    End If
+
+    With ThisWorkbook.VBProject.VBComponents(formName).CodeModule
+        If .CountOfLines > 0 Then .DeleteLines 1, .CountOfLines
+        If Len(codeText) > 0 Then .AddFromString codeText
+    End With
+
+    ThisWorkbook.VBProject.VBComponents.Remove tempComp
+    ReplaceExistingFormCodeFromFile = True
+    Exit Function
+
+ErrHandler:
+    On Error Resume Next
+    If Not tempComp Is Nothing Then
+        ThisWorkbook.VBProject.VBComponents.Remove tempComp
+    End If
+    If fso.FileExists(tempFrmPath) Then fso.DeleteFile tempFrmPath, True
+    If fso.FileExists(tempFrxPath) Then fso.DeleteFile tempFrxPath, True
+    ReplaceExistingFormCodeFromFile = False
+End Function
+
+Private Sub RenameFormBeginInFile(filePath As String, oldName As String, newName As String)
+    Dim st As Object
+    Set st = CreateObject("ADODB.Stream")
+    st.Open: st.Type = 2: st.Charset = "UTF-8"
+    st.LoadFromFile filePath
+    Dim content As String
+    content = st.ReadText
+    st.Close
+
+    ' The Begin block header line ends "} FormName " (VBE always appends a trailing space).
+    content = Replace(content, "} " & oldName & " ", "} " & newName & " ")
+
+    st.Open: st.Type = 2: st.Charset = "UTF-8"
+    st.WriteText content
+    st.SaveToFile filePath, 2
+    st.Close
+End Sub
+
 Sub ExportAllSheetMapsToMD()
     Dim ws As Worksheet
     Dim sheetFolderPath As String
@@ -317,7 +514,7 @@ Sub ExportAllSheetMapsToMD()
     For Each ws In ThisWorkbook.Worksheets
         mdContent = GenerateSheetMapMarkdown(ws)
         
-        fileName = sheetFolderPath & "\" & ws.CodeName & ".md"
+        fileName = sheetFolderPath & "\" & ws.codeName & ".md"
         
         SaveAsUTF8 fileName, mdContent
     Next
@@ -340,7 +537,7 @@ Sub ImportAllSheetMapsFromMD()
     End If
 
     For Each ws In ThisWorkbook.Worksheets
-        fileName = sheetFolderPath & "\" & ws.CodeName & ".md"
+        fileName = sheetFolderPath & "\" & ws.codeName & ".md"
         If fso.FileExists(fileName) Then
             mdContent = ReadUTF8(fileName)
             ApplySheetMapMarkdown ws, mdContent
@@ -359,7 +556,7 @@ Private Function GenerateSheetMapMarkdown(ws As Worksheet) As String
     Dim mergeMarker As String
     
     mapText = "# Sheet Configuration" & vbCrLf
-    mapText = mapText & "- VBA CodeName: " & ws.CodeName & vbCrLf
+    mapText = mapText & "- VBA CodeName: " & ws.codeName & vbCrLf
     mapText = mapText & "- Excel UI Name: " & ws.Name & vbCrLf & vbCrLf
     
     mapText = mapText & "| Address | Name | Value / Label | Formula | Style |" & vbCrLf
@@ -400,7 +597,7 @@ Private Function GenerateSheetMapMarkdown(ws As Worksheet) As String
                       " | " & mergeMarker & _
                       " | -" & _
                       " | " & IIf(styleParts = "", "-", styleParts) & " |" & vbCrLf
-        ElseIf rng.value <> "" Or rng.HasFormula Or rng.Interior.ColorIndex <> xlNone Then
+        ElseIf rng.Value <> "" Or rng.HasFormula Or rng.Interior.ColorIndex <> xlNone Then
             ' Normal cell (or master cell of a merged range)
             cellName = ""
             On Error Resume Next
@@ -437,7 +634,7 @@ Private Function GenerateSheetMapMarkdown(ws As Worksheet) As String
 
             mapText = mapText & "| " & rng.Address(False, False) & _
                       " | " & cellName & _
-                      " | " & EscapeCellValue(rng.value) & _
+                      " | " & EscapeCellValue(rng.Value) & _
                       " | " & IIf(rng.HasFormula, "`" & rng.Formula & "`", "-") & _
                       " | " & role & " |" & vbCrLf
         End If
@@ -466,7 +663,7 @@ Private Function GenerateSheetMapMarkdown(ws As Worksheet) As String
         shpFml = ""
 
         On Error Resume Next
-        shpLabel = shp.TextFrame.Characters.Text
+        shpLabel = shp.TextFrame.Characters.text
         shpOnAction = shp.OnAction
         On Error GoTo 0
 
@@ -794,6 +991,10 @@ Private Sub ReconstructMerges(ws As Worksheet, slaveAddrs() As String, masterAdd
             ws.Range(ws.Cells(minRow, minCol), ws.Cells(maxRow, maxCol)).Merge
         End If
     Next i
+End Sub
+
+Public Sub ExportSheetToMDFile(ws As Worksheet, filePath As String)
+    SaveAsUTF8 filePath, GenerateSheetMapMarkdown(ws)
 End Sub
 
 Private Function GetSystemAnsiCharset() As String

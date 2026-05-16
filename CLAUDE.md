@@ -66,11 +66,16 @@ Prefer late binding (`CreateObject`) so the code does not require a reference ad
 
 ---
 
-## Git commit and push
+## Git commit
 
 - Stage all modified and untracked files that are **not excluded by `.gitignore`**.
-- Commit with a concise message, then push to `origin main`.
+- Commit with a concise message to the local repository.
 - Do **not** stage files listed in `.gitignore`.
+
+## Pushing to GitHub
+
+- Push to `origin main` **only when explicitly asked by the user**.
+- Do not push automatically after every commit.
 
 ## Release management
 
@@ -88,7 +93,7 @@ When `xlsm_devkit.bas` has changed since the last release, create a new GitHub r
    git tag vX.Y.Z
    git push origin main
    git push origin vX.Y.Z
-   gh release create vX.Y.Z "xlsm_devkit.bas#xlsm_devkit.bas" \
+   gh release create vX.Y.Z "src/xlsm_devkit.bas#xlsm_devkit.bas" \
      --title "vX.Y.Z" \
      --notes "<content of the new CHANGELOG section>"
    ```
