@@ -13,15 +13,19 @@ Private Const MODULE_NAME As String = "xlsm_devkit"
 ' because a module cannot delete or overwrite itself.
 
 Public Sub exportAllModulesFormsSheetMaps()
-    ExportAllModules
-    ExportAllForms
-    ExportAllSheetMapsToMD
+    If MsgBox("Export all modules, forms, and sheet maps to src/ and sheet/?", _
+              vbYesNo + vbDefaultButton2) = vbNo Then Exit Sub
+    ExportAllModules True
+    ExportAllForms True
+    ExportAllSheetMapsToMD True
 End Sub
 
 Public Sub importAllModulesFormsSheetMaps()
-    ImportAllModules
-    ImportAllForms
-    ImportAllSheetMapsFromMD
+    If MsgBox("Import all modules, forms, and sheet maps from src/ and sheet/?", _
+              vbYesNo + vbDefaultButton2) = vbNo Then Exit Sub
+    ImportAllModules True
+    ImportAllForms True
+    ImportAllSheetMapsFromMD True
 End Sub
 
 Public Sub ShowInsertDeleteForm()
@@ -53,7 +57,7 @@ Public Sub callImportAllSheetMapsFromMD()
 End Sub
 
 
-Sub ExportAllModules()
+Sub ExportAllModules(Optional skipConfirm As Boolean = False)
     On Error Resume Next
     Dim test As Object
     Set test = ThisWorkbook.VBProject
@@ -62,7 +66,11 @@ Sub ExportAllModules()
         Exit Sub
     End If
     On Error GoTo 0
-    
+
+    If Not skipConfirm Then
+        If MsgBox("Export all VBA modules to src/?", vbYesNo + vbDefaultButton2) = vbNo Then Exit Sub
+    End If
+
     Dim dirPath As String
     dirPath = ThisWorkbook.Path & "\src"
     Dim fso As Object
@@ -75,22 +83,14 @@ Sub ExportAllModules()
     For Each comp In ThisWorkbook.VBProject.VBComponents
         If comp.Type <> 3 Then
             expPath = ThisWorkbook.Path & "\src\" & comp.Name & ".bas"
-            If fso.FileExists(expPath) Then
-                If MsgBox("Overwrite the following file?" & vbLf & expPath, vbYesNo + vbDefaultButton2) = vbYes Then
-                    fso.DeleteFile expPath, True
-                Else
-                    GoTo lblContinue
-                End If
-            End If
             comp.Export expPath
             ConvertEncoding expPath, GetSystemAnsiCharset(), "UTF-8"
         End If
-lblContinue:
     Next
     MsgBox "Export complete."
 End Sub
 
-Sub ImportAllModules()
+Sub ImportAllModules(Optional skipConfirm As Boolean = False)
     On Error Resume Next
     Dim test As Object
     Set test = ThisWorkbook.VBProject
@@ -99,7 +99,11 @@ Sub ImportAllModules()
         Exit Sub
     End If
     On Error GoTo 0
-    
+
+    If Not skipConfirm Then
+        If MsgBox("Import all VBA modules from src/?", vbYesNo + vbDefaultButton2) = vbNo Then Exit Sub
+    End If
+
     Dim thisModule As String
     thisModule = MODULE_NAME
 
@@ -325,7 +329,7 @@ Private Sub RenameModuleInFile(filePath As String, oldName As String, newName As
     st.Close
 End Sub
 
-Sub ExportAllForms()
+Sub ExportAllForms(Optional skipConfirm As Boolean = False)
     On Error Resume Next
     Dim test As Object
     Set test = ThisWorkbook.VBProject
@@ -334,6 +338,10 @@ Sub ExportAllForms()
         Exit Sub
     End If
     On Error GoTo 0
+
+    If Not skipConfirm Then
+        If MsgBox("Export all forms to src/?", vbYesNo + vbDefaultButton2) = vbNo Then Exit Sub
+    End If
 
     Dim dirPath As String
     dirPath = ThisWorkbook.Path & "\src"
@@ -349,24 +357,16 @@ Sub ExportAllForms()
     For Each comp In ThisWorkbook.VBProject.VBComponents
         If comp.Type = 3 Then
             expPath = dirPath & "\" & comp.Name & ".frm"
-            If fso.FileExists(expPath) Then
-                If MsgBox("Overwrite the following file?" & vbLf & expPath, vbYesNo + vbDefaultButton2) = vbYes Then
-                    fso.DeleteFile expPath, True
-                    frxPath = dirPath & "\" & comp.Name & ".frx"
-                    If fso.FileExists(frxPath) Then fso.DeleteFile frxPath, True
-                Else
-                    GoTo lblContinue
-                End If
-            End If
+            frxPath = dirPath & "\" & comp.Name & ".frx"
+            If fso.FileExists(frxPath) Then fso.DeleteFile frxPath, True
             comp.Export expPath
             ConvertEncoding expPath, GetSystemAnsiCharset(), "UTF-8"
         End If
-lblContinue:
     Next
     MsgBox "Form export complete."
 End Sub
 
-Sub ImportAllForms()
+Sub ImportAllForms(Optional skipConfirm As Boolean = False)
     On Error Resume Next
     Dim test As Object
     Set test = ThisWorkbook.VBProject
@@ -375,6 +375,10 @@ Sub ImportAllForms()
         Exit Sub
     End If
     On Error GoTo 0
+
+    If Not skipConfirm Then
+        If MsgBox("Import all forms from src/?", vbYesNo + vbDefaultButton2) = vbNo Then Exit Sub
+    End If
 
     Dim successCount As Long
     Dim failCount As Long
@@ -498,12 +502,16 @@ Private Sub RenameFormBeginInFile(filePath As String, oldName As String, newName
     st.Close
 End Sub
 
-Sub ExportAllSheetMapsToMD()
+Sub ExportAllSheetMapsToMD(Optional skipConfirm As Boolean = False)
+    If Not skipConfirm Then
+        If MsgBox("Export all sheet maps to sheet/?", vbYesNo + vbDefaultButton2) = vbNo Then Exit Sub
+    End If
+
     Dim ws As Worksheet
     Dim sheetFolderPath As String
     Dim fileName As String
     Dim mdContent As String
-    
+
     sheetFolderPath = ThisWorkbook.Path & "\sheet"
     Dim fso As Object
     Set fso = CreateObject("Scripting.FileSystemObject")
@@ -522,7 +530,11 @@ Sub ExportAllSheetMapsToMD()
     MsgBox "All sheet maps exported." & vbLf & "Saved to: " & sheetFolderPath, vbInformation
 End Sub
 
-Sub ImportAllSheetMapsFromMD()
+Sub ImportAllSheetMapsFromMD(Optional skipConfirm As Boolean = False)
+    If Not skipConfirm Then
+        If MsgBox("Import all sheet maps from sheet/?", vbYesNo + vbDefaultButton2) = vbNo Then Exit Sub
+    End If
+
     Dim ws As Worksheet
     Dim sheetFolderPath As String
     Dim fileName As String
