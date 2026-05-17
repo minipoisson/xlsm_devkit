@@ -20,7 +20,7 @@ Private mNewComponentName As String
 ' Entry point: ShowMoveSetupForm
 
 Public Sub ShowMoveSetupForm()
-    If MsgBox(T("msg.export_components_confirm", "Export all modules and forms to src/?"), _
+    If MsgBox(t("msg.export_components_confirm", "Export all modules and forms to src/?"), _
               vbYesNo + vbDefaultButton2) = vbNo Then Exit Sub
     CallExportAllComponents True
     devkit_frmMoveSetup.Show
@@ -69,14 +69,14 @@ Public Sub RunMoveCapture( _
     Exit Sub
 
 ErrExportOld:
-    MsgBox Fmt(T("msg.snapshot_export_failed", "Failed to export sheet snapshot: {0}"), Err.Description), vbExclamation
+    MsgBox Fmt(t("msg.snapshot_export_failed", "Failed to export sheet snapshot: {0}"), Err.Description), vbExclamation
 End Sub
 
 Private Function CheckAndConfirmOldMd(fso As Object, ws As Worksheet, sheetFolder As String) As Boolean
     Dim p As String
     p = sheetFolder & "\" & ws.codeName & ".old.md"
     If fso.FileExists(p) Then
-        If MsgBox(Fmt(T("msg.overwrite_old_md", "sheet\{0}.old.md already exists. Overwrite and continue?"), ws.codeName), _
+        If MsgBox(Fmt(t("msg.overwrite_old_md", "sheet\{0}.old.md already exists. Overwrite and continue?"), ws.codeName), _
                   vbYesNo + vbDefaultButton2) = vbNo Then
             Exit Function
         End If
@@ -91,7 +91,7 @@ End Function
 Public Sub ExecuteMoveCapturePhase2()
     If mWsSource Is Nothing Or mSnapshot Is Nothing Then
         If Not LoadState() Then
-            MsgBox T("msg.state_lost", "Operation state was lost. Please restart from ShowMoveSetupForm."), vbExclamation
+            MsgBox t("msg.state_lost", "Operation state was lost. Please restart from ShowMoveSetupForm."), vbExclamation
             Exit Sub
         End If
     End If
@@ -107,7 +107,7 @@ Public Sub ExecuteMoveCapturePhase2()
     Dim startLine As Long
     Dim addedLineCount As Long
     If Not IdentifyRecordedCode(newModName, subCode, startLine, addedLineCount) Then
-        MsgBox T("msg.no_macro_found", "No recorded macro was found in the VBA project. The operation will be cancelled."), vbExclamation
+        MsgBox t("msg.no_macro_found", "No recorded macro was found in the VBA project. The operation will be cancelled."), vbExclamation
         Call CleanupOldMdFiles(fso, sheetFolder)
         Exit Sub
     End If
@@ -118,7 +118,7 @@ Public Sub ExecuteMoveCapturePhase2()
     Dim dstSheetName As String, dstRange As String
     Dim unexpectedLines As String
     If Not ParseCutOperation(subCode, srcSheetName, srcRange, dstSheetName, dstRange, unexpectedLines) Then
-        MsgBox Fmt(T("msg.no_move_detected", "No cell move was detected in the recorded macro. The operation will be cancelled." & vbLf & vbLf & "Recorded code (first 500 chars):" & vbLf & "{0}"), Left(subCode, 500)), vbExclamation
+        MsgBox Fmt(t("msg.no_move_detected", "No cell move was detected in the recorded macro. The operation will be cancelled." & vbLf & vbLf & "Recorded code (first 500 chars):" & vbLf & "{0}"), Left(subCode, 500)), vbExclamation
         Call CleanupOldMdFiles(fso, sheetFolder)
         Exit Sub
     End If
@@ -132,7 +132,7 @@ Public Sub ExecuteMoveCapturePhase2()
     reducedAccuracy = False
     If dstSheetName <> mWsDest.Name Then
         Dim ans As VbMsgBoxResult
-        ans = MsgBox(Fmt(T("msg.wrong_sheet_confirm", _
+        ans = MsgBox(Fmt(t("msg.wrong_sheet_confirm", _
                           "The recorded move targets sheet '{0}', but '{1}' was selected in the setup dialog." & vbLf & _
                           "The .old.md for '{0}' was not saved before the move." & vbLf & vbLf & _
                           "Continue using the current state (reduced accuracy)?"), _
@@ -180,7 +180,7 @@ Public Sub ExecuteMoveCapturePhase2()
 
 ErrExportMd:
     ClearState
-    MsgBox T("msg.move_export_warning", "[WARNING] The cell move succeeded but the sheet export failed. The .old.md file(s) have been retained."), vbExclamation
+    MsgBox t("msg.move_export_warning", "[WARNING] The cell move succeeded but the sheet export failed. The .old.md file(s) have been retained."), vbExclamation
 End Sub
 
 ' ============================================================
@@ -722,6 +722,5 @@ Private Sub ClearState()
     DeleteSetting APP_KEY, REG_SECT
     On Error GoTo 0
 End Sub
-
 
 

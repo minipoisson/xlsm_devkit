@@ -24,9 +24,9 @@ Private m_syncLockSrc      As Boolean
 Private m_syncLockDst      As Boolean
 
 Private Sub UserForm_Initialize()
-    Me.Caption = T("frmMoveSetup.caption", "Cell Range Move - Setup")
-    btnOK.Caption = T("frmInsertDelete.btn_ok", "OK")
-    btnCancel.Caption = T("frmInsertDelete.btn_cancel", "Cancel")
+    Me.Caption = t("frmMoveSetup.caption", "Cell Range Move - Setup")
+    btnOK.Caption = t("frmInsertDelete.btn_ok", "OK")
+    btnCancel.Caption = t("frmInsertDelete.btn_cancel", "Cancel")
     If GetLangMeta("rtl") = "true" Then Me.RightToLeft = True
 
     Dim ws As Object
@@ -181,7 +181,7 @@ Private Sub btnCancel_Click()
     isDirty = (cboSrcCodeName.ListIndex >= 0) Or _
               (cboDstCodeName.ListIndex >= 0)
     If isDirty Then
-        If MsgBox(T("frmMoveSetup.discard_confirm", "Discard changes and close?"), vbOKCancel) = vbCancel Then Exit Sub
+        If MsgBox(t("frmMoveSetup.discard_confirm", "Discard changes and close?"), vbOKCancel) = vbCancel Then Exit Sub
     End If
     Unload Me
 End Sub
@@ -189,7 +189,4 @@ End Sub
 Private Sub UpdateBtnOK()
     btnOK.Enabled = Not (m_selectedSrcSheet Is Nothing)
 End Sub
-
-
-
 

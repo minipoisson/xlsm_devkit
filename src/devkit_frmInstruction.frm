@@ -19,10 +19,10 @@ Option Explicit
 ' Requires: xlsm_devkit.bas (ImportAllComponents)
 
 Private Sub UserForm_Initialize()
-    Me.Caption = T("frmInstruction.caption", "Update VBA References")
-    btnCopy.Caption = T("frmInstruction.btn_copy", "Copy")
-    btnImport.Caption = T("frmInstruction.btn_import", "Import")
-    btnClose.Caption = T("frmInstruction.btn_close", "Close")
+    Me.Caption = t("frmInstruction.caption", "Update VBA References")
+    btnCopy.Caption = t("frmInstruction.btn_copy", "Copy")
+    btnImport.Caption = t("frmInstruction.btn_import", "Import")
+    btnClose.Caption = t("frmInstruction.btn_close", "Close")
     If GetLangMeta("rtl") = "true" Then Me.RightToLeft = True
 End Sub
 
@@ -34,7 +34,7 @@ Private Sub btnCopy_Click()
 End Sub
 
 Private Sub btnImport_Click()
-    If MsgBox(T("frmInstruction.import_confirm", _
+    If MsgBox(t("frmInstruction.import_confirm", _
                 "Import all .bas files from src/ into this workbook?" & vbLf & _
                 "Make sure all changes are saved in VS Code first."), _
               vbYesNo + vbDefaultButton2) = vbNo Then
@@ -43,18 +43,16 @@ Private Sub btnImport_Click()
 
     On Error GoTo ErrHandler
     ImportAllComponents True
-    If MsgBox(T("frmInstruction.import_done", "Code has been imported."), vbOKOnly + vbInformation) = vbOK Then
+    If MsgBox(t("frmInstruction.import_done", "Code has been imported."), vbOKOnly + vbInformation) = vbOK Then
         Unload Me
     End If
     Exit Sub
 
 ErrHandler:
-    MsgBox Fmt(T("frmInstruction.import_failed", "Import failed: {0}"), Err.Description), vbExclamation
+    MsgBox Fmt(t("frmInstruction.import_failed", "Import failed: {0}"), Err.Description), vbExclamation
 End Sub
 
 Private Sub btnClose_Click()
     Unload Me
 End Sub
-
-
 

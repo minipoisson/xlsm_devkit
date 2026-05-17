@@ -1,10 +1,11 @@
 VERSION 5.00
-Begin {C62A69F0-16DC-11CE-9E98-00AA00574A4F} devkit_frmLauncher
-   Caption         =   "Language Settings"
-   ClientHeight    =   1440
+Begin {C62A69F0-16DC-11CE-9E98-00AA00574A4F} devkit_frmLauncher 
+   Caption         =   "Launcher"
+   ClientHeight    =   4640
    ClientLeft      =   110
    ClientTop       =   450
-   ClientWidth     =   4340
+   ClientWidth     =   4580
+   OleObjectBlob   =   "devkit_frmLauncher.frx":0000
    StartUpPosition =   1  '1 - CenterOwner
 End
 Attribute VB_Name = "devkit_frmLauncher"
@@ -14,47 +15,37 @@ Attribute VB_PredeclaredId = True
 Attribute VB_Exposed = False
 Option Explicit
 
-' Language-selection launcher form.
-' All controls are created programmatically to avoid requiring a .frx binary.
-' Requires: xlsm_devkit.bas (T, Fmt, SetLang, GetLangCode, ParseINI)
-
-Private WithEvents m_btnOK     As MSForms.CommandButton
-Private WithEvents m_btnCancel As MSForms.CommandButton
-Private m_cboLang   As MSForms.ComboBox
 Private m_langCodes() As String
+Private m_populating As Boolean
 
 Private Sub UserForm_Initialize()
-    Me.Caption = T("frmLauncher.caption", "Language Settings")
-    Me.Width = 280: Me.Height = 115
-
-    Dim lbl As MSForms.Label
-    Set lbl = Me.Controls.Add("Forms.Label.1", "lblLang")
-    lbl.Caption = T("frmLauncher.lbl_language", "Language:")
-    lbl.Left = 12: lbl.Top = 16: lbl.Width = 68: lbl.Height = 18
-
-    Set m_cboLang = Me.Controls.Add("Forms.ComboBox.1", "cboLanguage")
-    m_cboLang.Left = 84: m_cboLang.Top = 14: m_cboLang.Width = 170: m_cboLang.Height = 18
-    m_cboLang.Style = 2
-
-    Set m_btnOK = Me.Controls.Add("Forms.CommandButton.1", "btnOK")
-    m_btnOK.Caption = T("frmLauncher.btn_ok", "OK")
-    m_btnOK.Left = 100: m_btnOK.Top = 52: m_btnOK.Width = 70: m_btnOK.Height = 24
-    m_btnOK.Default = True
-
-    Set m_btnCancel = Me.Controls.Add("Forms.CommandButton.1", "btnCancel")
-    m_btnCancel.Caption = T("frmLauncher.btn_cancel", "Cancel")
-    m_btnCancel.Left = 178: m_btnCancel.Top = 52: m_btnCancel.Width = 70: m_btnCancel.Height = 24
-    m_btnCancel.Cancel = True
-
+    Me.Caption = t("frmLauncher.caption", "Language Settings")
+    lbl_language.Caption = t("frmLauncher.lbl_language", "Language:")
+    btnClose.Caption = t("frmLauncher.btn_close", "Close")
+    frameImport.Caption = t("frmLauncher.import", "Import")
+    frameExport.Caption = t("frmLauncher.export", "Export")
+    Dim strAll As String, strMF As String, strS As String
+    strAll = t("frmLauncher.all_modules_forms_sheets", "All modules, forms and sheets")
+    strMF = t("frmLauncher.all_modules_forms", "All modules and forms")
+    strS = t("frmLauncher.all_sheets", "All sheets")
+    btnExpAll.Caption = strAll
+    btnExpAllModulesForms.Caption = strMF
+    btnExpAllSheets.Caption = strS
+    btnImpAll.Caption = strAll
+    btnImpAllModulesForms.Caption = strMF
+    btnImpAllSheets.Caption = strS
+    
     If GetLangMeta("rtl") = "true" Then Me.RightToLeft = True
 
     PopulateLangList
 End Sub
 
 Private Sub PopulateLangList()
+    m_populating = True
     Dim systemLabel As String
-    systemLabel = T("frmLauncher.system_setting", "System setting")
-    m_cboLang.AddItem systemLabel
+    systemLabel = t("frmLauncher.system_setting", "System setting")
+    cboLang.Clear
+    cboLang.AddItem systemLabel
     ReDim m_langCodes(0)
     m_langCodes(0) = ""
 
@@ -73,7 +64,7 @@ Private Sub PopulateLangList()
                 If dict.Exists("meta.native_name") Then nativeName = dict("meta.native_name")
             End If
             If Len(nativeName) = 0 Then nativeName = code
-            m_cboLang.AddItem nativeName
+            cboLang.AddItem nativeName
             ReDim Preserve m_langCodes(UBound(m_langCodes) + 1)
             m_langCodes(UBound(m_langCodes)) = code
         End If
@@ -83,35 +74,59 @@ SelectCurrent:
     Dim currentCode As String
     currentCode = GetSetting("xlsm_devkit", "Language", "Code", "")
     If Len(currentCode) = 0 Then
-        m_cboLang.ListIndex = 0
+        cboLang.ListIndex = 0
     Else
         Dim i As Long
         For i = 1 To UBound(m_langCodes)
             If m_langCodes(i) = currentCode Then
-                m_cboLang.ListIndex = i: Exit For
+                cboLang.ListIndex = i: Exit For
             End If
         Next i
-        If m_cboLang.ListIndex < 0 Then m_cboLang.ListIndex = 0
+        If cboLang.ListIndex < 0 Then cboLang.ListIndex = 0
     End If
+    m_populating = False
 End Sub
-
-Private Sub m_btnOK_Click()
-    Dim idx As Long: idx = m_cboLang.ListIndex
+Private Sub cboLang_Change()
+    If m_populating Then Exit Sub
+    Dim idx As Long: idx = cboLang.ListIndex
     If idx < 0 Then idx = 0
     If idx = 0 Then
-        DeleteSetting "xlsm_devkit", "Language", "Code"
-        mLangCode = ""
-        Set mLangCache = Nothing
-        Set mEnCache = Nothing
+        SaveSetting "xlsm_devkit", "Language", "Code", ""
+        g_LangCode = ""
+        Set g_LangCache = Nothing
+        Set g_EnCache = Nothing
     Else
         SetLang m_langCodes(idx)
     End If
-    Unload Me
+    UserForm_Initialize
 End Sub
 
-Private Sub m_btnCancel_Click()
-    Unload Me
+Private Sub btnExpAll_Click()
+    ExportAllModulesFormsSheetMaps
 End Sub
 
+Private Sub btnExpAllModulesForms_Click()
+    CallExportAllComponents
+End Sub
+
+Private Sub btnExpAllSheets_Click()
+    CallExportAllSheetMapsToMD
+End Sub
+
+Private Sub btnImpAll_Click()
+    ImportAllModulesFormsSheetMaps
+End Sub
+
+Private Sub btnImpAllModulesForms_Click()
+    CallImportAllComponents
+End Sub
+
+Private Sub btnImpAllSheets_Click()
+    CallImportAllSheetMapsFromMD
+End Sub
+
+Private Sub btnClose_Click()
+    Unload Me
+End Sub
 
 
