@@ -20,7 +20,7 @@ Private mNewComponentName As String
 ' Entry point: ShowMoveSetupForm
 
 Public Sub ShowMoveSetupForm()
-    If MsgBox("Export all modules and forms to src/?", _
+    If MsgBox(T("msg.export_components_confirm", "Export all modules and forms to src/?"), _
               vbYesNo + vbDefaultButton2) = vbNo Then Exit Sub
     CallExportAllComponents True
     devkit_frmMoveSetup.Show
@@ -69,15 +69,15 @@ Public Sub RunMoveCapture( _
     Exit Sub
 
 ErrExportOld:
-    MsgBox "Failed to export sheet snapshot: " & Err.Description, vbExclamation
+    MsgBox Fmt(T("msg.snapshot_export_failed", "Failed to export sheet snapshot: {0}"), Err.Description), vbExclamation
 End Sub
 
 Private Function CheckAndConfirmOldMd(fso As Object, ws As Worksheet, sheetFolder As String) As Boolean
     Dim p As String
     p = sheetFolder & "\" & ws.codeName & ".old.md"
     If fso.FileExists(p) Then
-        If MsgBox("sheet\" & ws.codeName & ".old.md already exists." & vbLf & _
-                  "Overwrite and continue?", vbYesNo + vbDefaultButton2) = vbNo Then
+        If MsgBox(Fmt(T("msg.overwrite_old_md", "sheet\{0}.old.md already exists. Overwrite and continue?"), ws.codeName), _
+                  vbYesNo + vbDefaultButton2) = vbNo Then
             Exit Function
         End If
     End If
@@ -91,7 +91,7 @@ End Function
 Public Sub ExecuteMoveCapturePhase2()
     If mWsSource Is Nothing Or mSnapshot Is Nothing Then
         If Not LoadState() Then
-            MsgBox "Operation state was lost. Please restart from ShowMoveSetupForm.", vbExclamation
+            MsgBox T("msg.state_lost", "Operation state was lost. Please restart from ShowMoveSetupForm."), vbExclamation
             Exit Sub
         End If
     End If
@@ -107,8 +107,7 @@ Public Sub ExecuteMoveCapturePhase2()
     Dim startLine As Long
     Dim addedLineCount As Long
     If Not IdentifyRecordedCode(newModName, subCode, startLine, addedLineCount) Then
-        MsgBox "No recorded macro was found in the VBA project." & vbLf & _
-               "The operation will be cancelled.", vbExclamation
+        MsgBox T("msg.no_macro_found", "No recorded macro was found in the VBA project. The operation will be cancelled."), vbExclamation
         Call CleanupOldMdFiles(fso, sheetFolder)
         Exit Sub
     End If
@@ -119,9 +118,7 @@ Public Sub ExecuteMoveCapturePhase2()
     Dim dstSheetName As String, dstRange As String
     Dim unexpectedLines As String
     If Not ParseCutOperation(subCode, srcSheetName, srcRange, dstSheetName, dstRange, unexpectedLines) Then
-        MsgBox "No cell move was detected in the recorded macro." & vbLf & _
-               "The operation will be cancelled." & vbLf & vbLf & _
-               "Recorded code (first 500 chars):" & vbLf & Left(subCode, 500), vbExclamation
+        MsgBox Fmt(T("msg.no_move_detected", "No cell move was detected in the recorded macro. The operation will be cancelled." & vbLf & vbLf & "Recorded code (first 500 chars):" & vbLf & "{0}"), Left(subCode, 500)), vbExclamation
         Call CleanupOldMdFiles(fso, sheetFolder)
         Exit Sub
     End If
@@ -135,10 +132,11 @@ Public Sub ExecuteMoveCapturePhase2()
     reducedAccuracy = False
     If dstSheetName <> mWsDest.Name Then
         Dim ans As VbMsgBoxResult
-        ans = MsgBox("The recorded move targets sheet '" & dstSheetName & "'," & vbLf & _
-                     "but '" & mWsDest.Name & "' was selected in the setup dialog." & vbLf & _
-                     "The .old.md for '" & dstSheetName & "' was not saved before the move." & vbLf & vbLf & _
-                     "Continue using the current state of '" & dstSheetName & "' as context (reduced accuracy)?", _
+        ans = MsgBox(Fmt(T("msg.wrong_sheet_confirm", _
+                          "The recorded move targets sheet '{0}', but '{1}' was selected in the setup dialog." & vbLf & _
+                          "The .old.md for '{0}' was not saved before the move." & vbLf & vbLf & _
+                          "Continue using the current state (reduced accuracy)?"), _
+                         dstSheetName, mWsDest.Name), _
                      vbYesNo + vbDefaultButton2)
         If ans = vbNo Then
             Call CleanupOldMdFiles(fso, sheetFolder)
@@ -182,8 +180,7 @@ Public Sub ExecuteMoveCapturePhase2()
 
 ErrExportMd:
     ClearState
-    MsgBox "Warning: The cell move succeeded but the sheet export failed." & vbLf & _
-           "The .old.md file(s) have been retained.", vbExclamation
+    MsgBox T("msg.move_export_warning", "[WARNING] The cell move succeeded but the sheet export failed. The .old.md file(s) have been retained."), vbExclamation
 End Sub
 
 ' ============================================================

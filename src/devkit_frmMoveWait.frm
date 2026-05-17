@@ -19,13 +19,18 @@ Option Explicit
 ' Requires: devkit_Move.bas (ExecuteMoveCapturePhase2, CancelMoveCapture)
 
 Private Sub UserForm_Initialize()
+    Me.Caption = T("frmMoveWait.caption", "Cell Range Move - Recording")
+    btnStop.Caption = T("frmMoveWait.btn_stop", "Stop")
+    btnCancel.Caption = T("frmMoveWait.btn_cancel", "Cancel")
+    If GetLangMeta("rtl") = "true" Then Me.RightToLeft = True
+
     lblInstruction.Caption = _
-        "1. Start macro recording: Developer tab " & ChrW(8594) & " Record Macro." & vbLf & _
-        "   Set 'Store macro in: This Workbook', then click OK." & vbLf & _
-        "2. Move cells using Cut & Paste only (do not drag-and-drop)." & vbLf & _
-        "3. Stop recording: Developer tab " & ChrW(8594) & " Stop Recording." & vbLf & _
-        "4. Click Stop below."
-    lblReminder.Caption = ChrW(9888) & " Do not use drag-and-drop. Use Cut (Ctrl+X) then Paste (Ctrl+V or Enter)."
+        T("frmMoveWait.lbl_step1", "1. Start macro recording: Developer tab -> Record Macro.") & vbLf & _
+        T("frmMoveWait.lbl_step1b", "   Set 'Store macro in: This Workbook', then click OK.") & vbLf & _
+        T("frmMoveWait.lbl_step2", "2. Move cells using Cut & Paste only (do not drag-and-drop).") & vbLf & _
+        T("frmMoveWait.lbl_step3", "3. Stop recording: Developer tab -> Stop Recording.") & vbLf & _
+        T("frmMoveWait.lbl_step4", "4. Click Stop below.")
+    lblReminder.Caption = T("frmMoveWait.lbl_reminder", "[WARNING] Do not use drag-and-drop. Use Cut (Ctrl+X) then Paste (Ctrl+V or Enter).")
 End Sub
 
 Private Sub btnStop_Click()
@@ -35,8 +40,8 @@ Private Sub btnStop_Click()
 End Sub
 
 Private Sub btnCancel_Click()
-    If MsgBox("Stop recording first (Developer tab " & ChrW(8594) & " Stop Recording) if still active." & vbLf & vbLf & _
-              "Cancel the cell move operation? Snapshot files will be deleted.", _
+    If MsgBox(T("frmMoveWait.stop_reminder", "Stop recording first (Developer tab -> Stop Recording) if still active.") & vbLf & vbLf & _
+              T("frmMoveWait.cancel_confirm", "Cancel the cell move operation? Snapshot files will be deleted."), _
               vbYesNo + vbDefaultButton2) = vbNo Then Exit Sub
     CancelMoveCapture
     Unload Me

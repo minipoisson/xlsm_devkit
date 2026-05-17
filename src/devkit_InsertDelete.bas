@@ -9,7 +9,7 @@ Option Explicit
 ' Entry point: ShowInsertDeleteForm
 
 Public Sub ShowInsertDeleteForm()
-    If MsgBox("Export all modules, and forms to src/ and sheet/?", _
+    If MsgBox(T("msg.export_components_confirm", "Export all modules and forms to src/?"), _
               vbYesNo + vbDefaultButton2) = vbNo Then Exit Sub
     CallExportAllComponents True
     devkit_frmInsertDelete.Show
@@ -48,8 +48,8 @@ Public Sub RunInsertDelete( _
 
     ' Step 1: .old.md existence check
     If fso.FileExists(oldMdPath) Then
-        If MsgBox("sheet\" & ws.codeName & ".old.md already exists." & vbLf & _
-                  "Overwrite and continue?", vbYesNo + vbDefaultButton2) = vbNo Then
+        If MsgBox(Fmt(T("msg.overwrite_old_md", "sheet\{0}.old.md already exists. Overwrite and continue?"), ws.codeName), _
+                  vbYesNo + vbDefaultButton2) = vbNo Then
             Exit Sub
         End If
     End If
@@ -103,15 +103,14 @@ ErrHandler3:
     On Error Resume Next
     If fso.FileExists(oldMdPath) Then fso.DeleteFile oldMdPath, True
     On Error GoTo 0
-    MsgBox "Operation failed: " & errMsg3, vbExclamation
+    MsgBox Fmt(T("msg.operation_failed", "Operation failed: {0}"), errMsg3), vbExclamation
     Exit Sub
 
 ErrHandler4:
     Dim errMsg4 As String
     errMsg4 = Err.Description
     On Error GoTo 0
-    MsgBox "Warning: The Excel operation succeeded but the sheet export failed." & vbLf & _
-           "The .old.md file has been retained.", vbExclamation
+    MsgBox T("msg.export_warning", "[WARNING] The Excel operation succeeded but the sheet export failed. The .old.md file has been retained."), vbExclamation
     Exit Sub
 End Sub
 

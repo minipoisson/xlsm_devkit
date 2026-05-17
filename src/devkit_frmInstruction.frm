@@ -18,6 +18,14 @@ Option Explicit
 ' Shared result/import dialog used by InsertDelete and Move features.
 ' Requires: xlsm_devkit.bas (ImportAllComponents)
 
+Private Sub UserForm_Initialize()
+    Me.Caption = T("frmInstruction.caption", "Update VBA References")
+    btnCopy.Caption = T("frmInstruction.btn_copy", "Copy")
+    btnImport.Caption = T("frmInstruction.btn_import", "Import")
+    btnClose.Caption = T("frmInstruction.btn_close", "Close")
+    If GetLangMeta("rtl") = "true" Then Me.RightToLeft = True
+End Sub
+
 Private Sub btnCopy_Click()
     Dim obj As MSForms.DataObject
     Set obj = New MSForms.DataObject
@@ -26,21 +34,22 @@ Private Sub btnCopy_Click()
 End Sub
 
 Private Sub btnImport_Click()
-    If MsgBox("Import all .bas files from src/ into this workbook?" & vbLf & _
-              "Make sure all changes are saved in VS Code first.", _
+    If MsgBox(T("frmInstruction.import_confirm", _
+                "Import all .bas files from src/ into this workbook?" & vbLf & _
+                "Make sure all changes are saved in VS Code first."), _
               vbYesNo + vbDefaultButton2) = vbNo Then
         Exit Sub
     End If
 
     On Error GoTo ErrHandler
     ImportAllComponents True
-    If MsgBox("Code has been imported.", vbOKOnly + vbInformation) = vbOK Then
+    If MsgBox(T("frmInstruction.import_done", "Code has been imported."), vbOKOnly + vbInformation) = vbOK Then
         Unload Me
     End If
     Exit Sub
 
 ErrHandler:
-    MsgBox "Import failed: " & Err.Description, vbExclamation
+    MsgBox Fmt(T("frmInstruction.import_failed", "Import failed: {0}"), Err.Description), vbExclamation
 End Sub
 
 Private Sub btnClose_Click()

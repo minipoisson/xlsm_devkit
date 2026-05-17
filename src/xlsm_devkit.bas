@@ -3,8 +3,14 @@ Option Explicit
 
 #If VBA7 Then
 Private Declare PtrSafe Function GetACP Lib "kernel32" () As Long
+Private Declare PtrSafe Function GetLocaleInfoA Lib "kernel32" ( _
+    ByVal Locale As Long, ByVal LCType As Long, _
+    ByVal lpLCData As String, ByVal cchData As Long) As Long
 #Else
 Private Declare Function GetACP Lib "kernel32" () As Long
+Private Declare Function GetLocaleInfoA Lib "kernel32" ( _
+    ByVal Locale As Long, ByVal LCType As Long, _
+    ByVal lpLCData As String, ByVal cchData As Long) As Long
 #End If
 
 ' Core module. No dependencies on optional feature modules.
@@ -22,18 +28,22 @@ Private Const MODULE_NAME As String = "xlsm_devkit"
 ' Set False when developing devkit optional modules themselves.
 Private Const SKIP_DEVKIT_MODULES As Boolean = True
 
+Private mLangCode  As String
+Private mLangCache As Object
+Private mEnCache   As Object
+
 ' NOTE: This module itself is NOT imported by ImportAllComponents()
 ' because a module cannot delete or overwrite itself.
 
 Public Sub ExportAllModulesFormsSheetMaps()
-    If MsgBox("Export all modules, forms, and sheet maps to src/ and sheet/?", _
+    If MsgBox(T("msg.export_all_confirm", "Export all modules, forms, and sheet maps to src/ and sheet/?"), _
               vbYesNo + vbDefaultButton2) = vbNo Then Exit Sub
     ExportAllComponents True
     ExportAllSheetMapsToMD True
 End Sub
 
 Public Sub ImportAllModulesFormsSheetMaps()
-    If MsgBox("Import all modules, forms, and sheet maps from src/ and sheet/?", _
+    If MsgBox(T("msg.import_all_confirm", "Import all modules, forms, and sheet maps from src/ and sheet/?"), _
               vbYesNo + vbDefaultButton2) = vbNo Then Exit Sub
     ImportAllComponents True
     ImportAllSheetMapsFromMD True
@@ -61,7 +71,7 @@ Private Function CheckVBProjectAccess() As Boolean
     Dim test As Object
     Set test = ThisWorkbook.VBProject
     If Err.Number <> 0 Then
-        MsgBox "Please enable 'Trust access to the VBA project object model' in Excel macro settings."
+        MsgBox T("msg.trust_vba_required", "Please enable 'Trust access to the VBA project object model' in Excel macro settings.")
         Exit Function
     End If
     On Error GoTo 0
@@ -71,7 +81,7 @@ End Function
 Sub ExportAllComponents(Optional skipConfirm As Boolean = False)
     If Not CheckVBProjectAccess() Then Exit Sub
     If Not skipConfirm Then
-        If MsgBox("Export all modules and forms to src/?", vbYesNo + vbDefaultButton2) = vbNo Then Exit Sub
+        If MsgBox(T("msg.export_components_confirm", "Export all modules and forms to src/?"), vbYesNo + vbDefaultButton2) = vbNo Then Exit Sub
     End If
 
     Dim dirPath As String: dirPath = ThisWorkbook.Path & "\src"
@@ -90,19 +100,19 @@ Sub ExportAllComponents(Optional skipConfirm As Boolean = False)
         comp.Export expPath
         ConvertEncoding expPath, GetSystemAnsiCharset(), "UTF-8", (comp.Type = 3)
     Next
-    MsgBox "Export complete."
+    MsgBox T("msg.export_complete", "Export complete.")
 End Sub
 
 Sub ImportAllComponents(Optional skipConfirm As Boolean = False)
     If Not CheckVBProjectAccess() Then Exit Sub
     If Not skipConfirm Then
-        If MsgBox("Import all modules and forms from src/?", vbYesNo + vbDefaultButton2) = vbNo Then Exit Sub
+        If MsgBox(T("msg.import_components_confirm", "Import all modules and forms from src/?"), vbYesNo + vbDefaultButton2) = vbNo Then Exit Sub
     End If
 
     Dim fso As Object: Set fso = CreateObject("Scripting.FileSystemObject")
     Dim srcPath As String: srcPath = ThisWorkbook.Path & "\src"
     If Not fso.FolderExists(srcPath) Then
-        MsgBox "Source folder not found: " & srcPath, vbExclamation
+        MsgBox Fmt(T("msg.source_not_found", "Source folder not found: {0}"), srcPath), vbExclamation
         Exit Sub
     End If
 
@@ -141,7 +151,7 @@ lblNext:
     Next srcFile
 
     Dim msg As String
-    msg = "Import complete." & vbLf & "Success: " & successCount & vbLf & "Failed: " & failCount
+    msg = T("msg.import_complete", "Import complete.") & vbLf & "Success: " & successCount & vbLf & "Failed: " & failCount
     If skipCount > 0 Then msg = msg & vbLf & "Skipped (in use): " & skipCount
     MsgBox msg, IIf(failCount = 0, vbInformation, vbExclamation)
 End Sub
@@ -417,7 +427,7 @@ End Sub
 
 Sub ExportAllSheetMapsToMD(Optional skipConfirm As Boolean = False)
     If Not skipConfirm Then
-        If MsgBox("Export all sheet maps to sheet/?", vbYesNo + vbDefaultButton2) = vbNo Then Exit Sub
+        If MsgBox(T("msg.export_sheets_confirm", "Export all sheet maps to sheet/?"), vbYesNo + vbDefaultButton2) = vbNo Then Exit Sub
     End If
 
     Dim ws As Worksheet
@@ -440,12 +450,12 @@ Sub ExportAllSheetMapsToMD(Optional skipConfirm As Boolean = False)
         SaveAsUTF8 fileName, mdContent
     Next
     
-    MsgBox "All sheet maps exported." & vbLf & "Saved to: " & sheetFolderPath, vbInformation
+    MsgBox Fmt(T("msg.sheet_maps_exported", "All sheet maps exported. Saved to: {0}"), sheetFolderPath), vbInformation
 End Sub
 
 Sub ImportAllSheetMapsFromMD(Optional skipConfirm As Boolean = False)
     If Not skipConfirm Then
-        If MsgBox("Import all sheet maps from sheet/?", vbYesNo + vbDefaultButton2) = vbNo Then Exit Sub
+        If MsgBox(T("msg.import_sheets_confirm", "Import all sheet maps from sheet/?"), vbYesNo + vbDefaultButton2) = vbNo Then Exit Sub
     End If
 
     Dim ws As Worksheet
@@ -457,7 +467,7 @@ Sub ImportAllSheetMapsFromMD(Optional skipConfirm As Boolean = False)
     Dim fso As Object
     Set fso = CreateObject("Scripting.FileSystemObject")
     If Not fso.FolderExists(sheetFolderPath) Then
-        MsgBox "Sheet folder not found: " & sheetFolderPath, vbExclamation
+        MsgBox Fmt(T("msg.sheet_not_found", "Sheet folder not found: {0}"), sheetFolderPath), vbExclamation
         Exit Sub
     End If
 
@@ -469,7 +479,7 @@ Sub ImportAllSheetMapsFromMD(Optional skipConfirm As Boolean = False)
         End If
     Next ws
 
-    MsgBox "All sheet maps imported.", vbInformation
+    MsgBox T("msg.sheet_maps_imported", "All sheet maps imported."), vbInformation
 End Sub
 
 Private Function GenerateSheetMapMarkdown(ws As Worksheet) As String
@@ -1207,6 +1217,131 @@ Private Sub ApplyHiddenCols(ws As Worksheet, rangeStr As String)
         End If
     Next i
 End Sub
+
+' ============================================================
+' Internationalization — T(), Fmt(), SetLang(), GetLangCode()
+' ============================================================
+
+' Returns localized text for key, falling back through: target lang -> en.ini -> defaultVal -> key.
+' INI files live in {ThisWorkbook.Path}\lang\<code>.ini (BOM-less UTF-8).
+' Use Fmt() separately for {0}/{1}/... placeholder substitution.
+Public Function T(key As String, Optional defaultVal As String = "") As String
+    Dim code As String: code = GetLangCode()
+    If mLangCode <> code Or mLangCache Is Nothing Then
+        mLangCode = code
+        Set mLangCache = ParseINI(ThisWorkbook.Path & "\lang\" & code & ".ini")
+        If code <> "en" Then
+            Set mEnCache = ParseINI(ThisWorkbook.Path & "\lang\en.ini")
+        Else
+            Set mEnCache = Nothing
+        End If
+    End If
+    If Not mLangCache Is Nothing Then
+        If mLangCache.Exists(key) Then T = mLangCache(key): Exit Function
+    End If
+    If Not mEnCache Is Nothing Then
+        If mEnCache.Exists(key) Then T = mEnCache(key): Exit Function
+    End If
+    If Len(defaultVal) > 0 Then T = defaultVal: Exit Function
+    T = key
+End Function
+
+' Replaces {0}, {1}, ... in text with the supplied args.
+Public Function Fmt(text As String, ParamArray args() As Variant) As String
+    Dim result As String: result = text
+    Dim i As Long
+    For i = 0 To UBound(args)
+        result = Replace(result, "{" & i & "}", CStr(args(i)))
+    Next i
+    Fmt = result
+End Function
+
+' Saves the language code to Registry and resets the cache.
+' Pass an empty string to revert to system-language auto-detection.
+Public Sub SetLang(langCode As String)
+    If Len(langCode) = 0 Then
+        On Error Resume Next
+        DeleteSetting "xlsm_devkit", "Language", "Code"
+        On Error GoTo 0
+    Else
+        SaveSetting "xlsm_devkit", "Language", "Code", langCode
+    End If
+    mLangCode = ""
+    Set mLangCache = Nothing
+    Set mEnCache = Nothing
+End Sub
+
+' Returns the active language code (Registry > OS detection > "en").
+Public Function GetLangCode() As String
+    Dim code As String
+    code = GetSetting("xlsm_devkit", "Language", "Code", "")
+    If Len(code) > 0 Then GetLangCode = code: Exit Function
+    GetLangCode = DetectSystemLang()
+End Function
+
+' Returns a value from the [meta] section of the current language INI.
+Public Function GetLangMeta(metaKey As String) As String
+    GetLangMeta = T("meta." & metaKey, "")
+End Function
+
+' Opens the language-selection launcher form.
+Public Sub ShowLauncherForm()
+    devkit_frmLauncher.Show
+End Sub
+
+' Parses a BOM-less UTF-8 INI file into a Dictionary keyed as "section.key".
+' Returns Nothing if the file does not exist.
+' INI values may use \n as a newline escape.
+Public Function ParseINI(filePath As String) As Object
+    Dim fso As Object: Set fso = CreateObject("Scripting.FileSystemObject")
+    If Not fso.FileExists(filePath) Then Exit Function
+
+    Dim content As String: content = ReadUTF8(filePath)
+    Dim dict As Object: Set dict = CreateObject("Scripting.Dictionary")
+
+    Dim lines() As String
+    lines = Split(Replace(Replace(content, vbCrLf, vbLf), vbCr, vbLf), vbLf)
+
+    Dim currentSection As String
+    Dim i As Long, eq As Long, cb As Long
+    Dim ln As String, k As String, v As String
+    For i = 0 To UBound(lines)
+        ln = Trim(lines(i))
+        If Len(ln) = 0 Then GoTo NextINILine
+        If Left(ln, 1) = ";" Or Left(ln, 1) = "#" Then GoTo NextINILine
+        If Left(ln, 1) = "[" Then
+            cb = InStr(ln, "]")
+            If cb > 2 Then currentSection = Mid(ln, 2, cb - 2)
+        Else
+            eq = InStr(ln, "=")
+            If eq > 1 And Len(currentSection) > 0 Then
+                k = currentSection & "." & Trim(Left(ln, eq - 1))
+                v = Replace(Mid(ln, eq + 1), "\n", vbLf)
+                dict(k) = v
+            End If
+        End If
+NextINILine:
+    Next i
+    Set ParseINI = dict
+End Function
+
+' Detects the system UI language code (ISO 639-1) and checks for a matching lang INI file.
+' Falls back to "en" if no matching file exists.
+Private Function DetectSystemLang() As String
+    Const LOCALE_USER_DEFAULT As Long = &H400
+    Const LOCALE_SISO639LANGNAME As Long = &H59
+    Dim buf As String: buf = Space(10)
+    Dim nLen As Long
+    nLen = GetLocaleInfoA(LOCALE_USER_DEFAULT, LOCALE_SISO639LANGNAME, buf, Len(buf))
+    If nLen > 1 Then
+        Dim code As String: code = LCase(Left(buf, nLen - 1))
+        Dim fso As Object: Set fso = CreateObject("Scripting.FileSystemObject")
+        If fso.FileExists(ThisWorkbook.Path & "\lang\" & code & ".ini") Then
+            DetectSystemLang = code: Exit Function
+        End If
+    End If
+    DetectSystemLang = "en"
+End Function
 
 Private Function GetSystemAnsiCharset() As String
     Dim cp As Long

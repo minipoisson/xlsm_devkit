@@ -25,9 +25,20 @@ Private m_colNum        As Long
 Private m_syncLock      As Boolean
 
 Private Sub UserForm_Initialize()
-    Dim ws As Object
-    spnCount.Value = 1
+    Me.Caption = T("frmInsertDelete.caption", "Insert/Delete Rows/Columns")
+    btnOK.Caption = T("frmInsertDelete.btn_ok", "OK")
+    btnCancel.Caption = T("frmInsertDelete.btn_cancel", "Cancel")
+    If GetLangMeta("rtl") = "true" Then Me.RightToLeft = True
 
+    Dim ws As Object
+    For Each ws In ThisWorkbook.Sheets
+        If ws.Type = xlWorksheet Then
+            cboCodeName.AddItem ws.codeName
+            cboSheetName.AddItem ws.Name
+        End If
+    Next ws
+
+    spnCount.Value = 1
     m_isValidN = False
     btnOK.Enabled = False
     UpdateLabels
@@ -158,7 +169,7 @@ Private Sub btnCancel_Click()
               (optDelete.Value = True)
 
     If isDirty Then
-        If MsgBox("Discard changes and close?", vbOKCancel) = vbCancel Then Exit Sub
+        If MsgBox(T("frmInsertDelete.discard_confirm", "Discard changes and close?"), vbOKCancel) = vbCancel Then Exit Sub
     End If
     Unload Me
 End Sub
@@ -168,13 +179,13 @@ Private Sub UpdateLabels()
     pos = Trim(txtN.text)
 
     If Len(pos) = 0 Then
-        lblRecognized.Caption = "(enter a row number or column letter)"
+        lblRecognized.Caption = T("frmInsertDelete.lbl_hint", "(enter a row number or column letter)")
     ElseIf m_isValidN And m_isRowMode Then
-        lblRecognized.Caption = ChrW(8594) & " Row " & pos
+        lblRecognized.Caption = Fmt(T("frmInsertDelete.lbl_row", "-> Row {0}"), pos)
     ElseIf m_isValidN And Not m_isRowMode Then
-        lblRecognized.Caption = ChrW(8594) & " Column " & UCase(pos) & "  (col " & m_colNum & ")"
+        lblRecognized.Caption = Fmt(T("frmInsertDelete.lbl_col", "-> Column {0}  (col {1})"), UCase(pos), m_colNum)
     Else
-        lblRecognized.Caption = ChrW(8594) & " Invalid input"
+        lblRecognized.Caption = T("frmInsertDelete.lbl_invalid", "-> Invalid input")
     End If
 
     If Not m_isValidN Or Len(pos) = 0 Then
@@ -191,23 +202,18 @@ Private Sub UpdateLabels()
         cnt = 1
     End If
 
-    Dim rowWord As String
-    Dim colWord As String
-    rowWord = IIf(cnt = 1, "row", "rows")
-    colWord = IIf(cnt = 1, "column", "columns")
-
     Dim action As String
     If m_isRowMode Then
         If optInsert.Value Then
-            action = "Insert " & cnt & " " & rowWord & " before row " & pos
+            action = Fmt(T("frmInsertDelete.action_insert_row", "Insert {0} row(s) before row {1}"), cnt, pos)
         Else
-            action = "Delete " & cnt & " " & rowWord & " at row " & pos
+            action = Fmt(T("frmInsertDelete.action_delete_row", "Delete {0} row(s) at row {1}"), cnt, pos)
         End If
     Else
         If optInsert.Value Then
-            action = "Insert " & cnt & " " & colWord & " before column " & UCase(pos) & " (col " & m_colNum & ")"
+            action = Fmt(T("frmInsertDelete.action_insert_col", "Insert {0} column(s) before column {1} (col {2})"), cnt, UCase(pos), m_colNum)
         Else
-            action = "Delete " & cnt & " " & colWord & " starting at column " & UCase(pos) & " (col " & m_colNum & ")"
+            action = Fmt(T("frmInsertDelete.action_delete_col", "Delete {0} column(s) starting at column {1} (col {2})"), cnt, UCase(pos), m_colNum)
         End If
     End If
     lblAction.Caption = action
