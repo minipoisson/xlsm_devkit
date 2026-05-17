@@ -5,4 +5,5 @@ src/old/
 src/ThisWorkbook.bas
 src/Module*.bas
 src/Sheet*.bas
+src/*.log
 sheet/

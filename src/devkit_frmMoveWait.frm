@@ -1,12 +1,12 @@
 VERSION 5.00
-Begin {C62A69F0-16DC-11CE-9E98-00AA00574A4F} devkit_frmMoveWait
+Begin {C62A69F0-16DC-11CE-9E98-00AA00574A4F} devkit_frmMoveWait 
    Caption         =   "Cell Range Move - Recording"
    ClientHeight    =   3140
    ClientLeft      =   110
    ClientTop       =   450
    ClientWidth     =   4580
    OleObjectBlob   =   "devkit_frmMoveWait.frx":0000
-   StartUpPosition =   1  'オーナー フォームの中央
+   StartUpPosition =   1  '1 - CenterOwner
 End
 Attribute VB_Name = "devkit_frmMoveWait"
 Attribute VB_GlobalNameSpace = False
@@ -48,5 +48,6 @@ Private Sub UserForm_QueryClose(Cancel As Integer, CloseMode As Integer)
         btnCancel_Click
     End If
 End Sub
+
 
 

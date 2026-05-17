@@ -18,6 +18,9 @@ Private Declare Function GetACP Lib "kernel32" () As Long
 '   ExportSheetToMDFile(ws as Worksheet, filePath as String) - export a single sheet map to a specified Markdown file
 
 Private Const MODULE_NAME As String = "xlsm_devkit"
+' Set True to skip optional devkit feature modules on import (recommended for users).
+' Set False when developing devkit optional modules themselves.
+Private Const SKIP_DEVKIT_MODULES As Boolean = True
 
 ' NOTE: This module itself is NOT imported by ImportAllComponents()
 ' because a module cannot delete or overwrite itself.
@@ -85,7 +88,7 @@ Sub ExportAllComponents(Optional skipConfirm As Boolean = False)
             expPath = dirPath & "\" & comp.Name & ".bas"
         End If
         comp.Export expPath
-        ConvertEncoding expPath, GetSystemAnsiCharset(), "UTF-8"
+        ConvertEncoding expPath, GetSystemAnsiCharset(), "UTF-8", (comp.Type = 3)
     Next
     MsgBox "Export complete."
 End Sub
@@ -118,6 +121,7 @@ Sub ImportAllComponents(Optional skipConfirm As Boolean = False)
         compName = Left(srcFile.Name, Len(srcFile.Name) - Len(ext) - 1)
         If ext = "bas" Then
             If compName = MODULE_NAME Then GoTo lblNext              ' xlsm_devkit (self)
+            If SKIP_DEVKIT_MODULES And Left(compName, 7) = "devkit_" Then GoTo lblNext  ' optional devkit modules
             If compName = "devkit_Move" And isMoveLocked Then         ' devkit_Move on call stack
                 skipCount = skipCount + 1: GoTo lblNext
             End If
@@ -127,6 +131,7 @@ Sub ImportAllComponents(Optional skipConfirm As Boolean = False)
                 If ImportNewComponentFromFile(srcFile.Path) Then successCount = successCount + 1 Else failCount = failCount + 1
             End If
         ElseIf ext = "frm" Then
+            If SKIP_DEVKIT_MODULES And Left(compName, 7) = "devkit_" Then GoTo lblNext  ' optional devkit forms
             If IsFormCurrentlyLoaded(compName) Then                  ' skip any loaded form
                 skipCount = skipCount + 1: GoTo lblNext
             End If
@@ -141,7 +146,8 @@ lblNext:
     MsgBox msg, IIf(failCount = 0, vbInformation, vbExclamation)
 End Sub
 
-Private Sub ConvertEncoding(filePath As String, fromCharset As String, toCharset As String)
+Private Sub ConvertEncoding(filePath As String, fromCharset As String, toCharset As String, _
+                            Optional normalizeStartUpPos As Boolean = False)
     Dim st As Object
     Set st = CreateObject("ADODB.Stream")
     st.Open
@@ -151,6 +157,8 @@ Private Sub ConvertEncoding(filePath As String, fromCharset As String, toCharset
     Dim content As String
     content = st.ReadText
     st.Close
+
+    If normalizeStartUpPos Then content = NormalizeStartUpPosition(content)
 
     If LCase(toCharset) = "utf-8" Then
         SaveAsUTF8 filePath, content
@@ -781,6 +789,34 @@ Private Function ColorToHex(colorVal As Long) As String
     ColorToHex = "#" & Right("00" & Hex(r), 2) & Right("00" & Hex(g), 2) & Right("00" & Hex(b), 2)
 End Function
 
+Private Function NormalizeStartUpPosition(content As String) As String
+    Dim labels(0 To 3) As String
+    labels(0) = "0 - Manual"
+    labels(1) = "1 - CenterOwner"
+    labels(2) = "2 - CenterScreen"
+    labels(3) = "3 - Windows Default"
+
+    Dim re As Object
+    Set re = CreateObject("VBScript.RegExp")
+    re.Pattern = "StartUpPosition\s*=\s*(\d)\s+'[^\r\n]*"
+    re.Global = True
+
+    Dim ms As Object
+    Set ms = re.Execute(content)
+
+    Dim i As Long
+    For i = ms.count - 1 To 0 Step -1
+        Dim m As Object: Set m = ms(i)
+        Dim v As Integer: v = CInt(m.SubMatches(0))
+        Dim canonical As String
+        canonical = "StartUpPosition =   " & v & "  '" & labels(v)
+        content = Left(content, m.FirstIndex) & canonical & _
+                  Mid(content, m.FirstIndex + m.Length + 1)
+    Next i
+
+    NormalizeStartUpPosition = content
+End Function
+
 Private Sub SaveAsUTF8(filePath As String, content As String)
     ' ADODB.Stream always prepends a 3-byte UTF-8 BOM; strip it via binary copy.
     Dim stText As Object
@@ -1193,5 +1229,3 @@ Private Function GetSystemAnsiCharset() As String
         Case Else: GetSystemAnsiCharset = "Windows-" & cp
     End Select
 End Function
-
-

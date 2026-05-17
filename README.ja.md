@@ -59,28 +59,28 @@ Excel のマクロ記録機能を使ってセル範囲の切り取り・貼り�
 1. 開発対象の `.xlsm` を開き、`Alt + F11` で VBE を開く。
 2. プロジェクトエクスプローラーで対象プロジェクトを右クリックし、`ファイルのインポート` から `xlsm_devkit.bas` を読み込む。
 3. Excel の設定で「VBA プロジェクト オブジェクト モデルへのアクセスを信頼する」を有効にする。
-4. `CallExportAllComponents` を実行し、ブックと同じフォルダに `src/` が作成されることを確認する。
-5. VS Code などで `src/` 内のファイルを編集し、`CallImportAllComponents` を実行する。
+4. `ExportAllModulesFormsSheetMaps` を実行し、ブックと同じフォルダに `src/` と `sheet/` が作成されることを確認する。
+5. VS Code などで `src/` 内のファイルを編集し、`ImportAllModulesFormsSheetMaps` を実行する。
 
-### モジュールとフォームのエクスポート
+### エクスポート
 
-1. Excel で `CallExportAllComponents` マクロを実行する。
-2. ブックと同じフォルダの `src/` に各モジュールの `.bas` ファイルと各フォームの `.frm` ファイルが BOM なし UTF-8 で書き出される。フォームにバイナリリソースがある場合は VBE が同名の `.frx` ファイルも書き出す。
+`ExportAllModulesFormsSheetMaps` を実行すると、全モジュール・フォームとシートマップをまとめてエクスポートします。
 
-### モジュールとフォームのインポート
+- 各モジュール → `src/*.bas`（BOM なし UTF-8）、各フォーム → `src/*.frm`（BOM なし UTF-8）、バイナリリソース → `src/*.frx`。
+- 各シート → `sheet/*.md`（BOM なし UTF-8）。
 
-1. `CallImportAllComponents` マクロを実行する。
-2. `src/` 内のファイルがプロジェクトに読み込まれる。既存のモジュール・フォームはコードが更新され、新規のモジュール・フォームは追加される。同フォルダの `*.frx` は VBE が自動的に参照する。
+モジュール・フォームのみエクスポートする場合は `CallExportAllComponents` を実行します。  
+シートマップのみエクスポートする場合は `CallExportAllSheetMapsToMD` を実行します。
 
-### シートマップのエクスポート
+### インポート
 
-1. `CallExportAllSheetMapsToMD` マクロを実行する。
-2. ブックと同じフォルダの `sheet/` に各シートの Markdown ファイルが書き出される。
+`ImportAllModulesFormsSheetMaps` を実行すると、全モジュール・フォームとシートマップをまとめてインポートします。
 
-### シートマップのインポート
+- `src/` 内のファイルがプロジェクトに読み込まれます。既存のモジュール・フォームはコードが更新され、新規のものは追加されます。同フォルダの `*.frx` は VBE が自動的に参照します。
+- `sheet/*.md` が対応するシートに適用されます（セル値・数式・背景色・文字色・フォントサイズ・入力規則リスト・名前付き範囲・結合セル）。
 
-1. `CallImportAllSheetMapsFromMD` マクロを実行する。
-2. `sheet/*.md` が順に読み込まれ、対応するシートにセル値・数式・背景色・文字色・フォントサイズ・入力規則リスト・名前付き範囲・結合セルが復元される。
+モジュール・フォームのみインポートする場合は `CallImportAllComponents` を実行します。  
+シートマップのみインポートする場合は `CallImportAllSheetMapsFromMD` を実行します。
 
 ## 前提条件
 
@@ -110,7 +110,7 @@ VBA の `VBComponents.Export` / `VBComponents.Import` はシステムの ANSI �
 
 ## 制約事項
 
-- `xlsm_devkit` 自身は `CallImportAllComponents` によってインポートされません（実行中のモジュールは上書き・削除できないため）。`xlsm_devkit` を更新する場合は、手動で VBE に貼り付けてください。
+- `xlsm_devkit` 自身は `ImportAllModulesFormsSheetMaps` や `CallImportAllComponents` によってインポートされません（実行中のモジュールは上書き・削除できないため）。`xlsm_devkit` を更新する場合は、手動で VBE に貼り付けてください。
 - Windows + Excel VBA 環境が必要です。
 
 ## 動作確認環境

@@ -61,28 +61,28 @@ Entry point: `ShowMoveSetupForm`
 1. Open your target `.xlsm` workbook and press `Alt + F11` to open the VBE.
 2. In Project Explorer, right-click the target VBA project and import `xlsm_devkit.bas`.
 3. Enable "Trust access to the VBA project object model" in Excel settings.
-4. Run `CallExportAllComponents` once and confirm that `src/` is created next to the workbook.
-5. Edit files in `src/` with VS Code, then run `CallImportAllComponents`.
+4. Run `ExportAllModulesFormsSheetMaps` once and confirm that `src/` and `sheet/` are created next to the workbook.
+5. Edit files in `src/` with VS Code, then run `ImportAllModulesFormsSheetMaps`.
 
-### Exporting modules and forms
+### Exporting
 
-1. Run the `CallExportAllComponents` macro in Excel.
-2. Each module is written as a `.bas` file (UTF-8, BOM-less) and each form as a `.frm` file (UTF-8, BOM-less) to a `src/` folder next to the workbook. If a form has binary resources, VBE also writes a companion `.frx` file.
+Run `ExportAllModulesFormsSheetMaps` to export all modules, forms, and sheet maps at once.
 
-### Importing modules and forms
+- Each module → `src/*.bas` (UTF-8, BOM-less), each form → `src/*.frm` (UTF-8, BOM-less), binary resources → `src/*.frx`.
+- Each sheet → `sheet/*.md` (UTF-8, BOM-less).
 
-1. Run the `CallImportAllComponents` macro.
-2. Files from `src/` are loaded into the project. Existing modules and forms have their code updated; new modules and forms are added. The companion `*.frx` in the same folder is picked up automatically.
+To export only modules and forms (without sheet maps), run `CallExportAllComponents`.  
+To export only sheet maps, run `CallExportAllSheetMapsToMD`.
 
-### Exporting sheet maps
+### Importing
 
-1. Run the `CallExportAllSheetMapsToMD` macro.
-2. A Markdown file for each sheet is written to a `sheet/` folder next to the workbook.
+Run `ImportAllModulesFormsSheetMaps` to import all modules, forms, and sheet maps at once.
 
-### Importing sheet maps
+- Files from `src/` are loaded into the project. Existing modules/forms are updated; new ones are added. Companion `*.frx` files are picked up automatically.
+- Each `sheet/*.md` is applied to the corresponding sheet: cell values, formulas, background/foreground colors, font sizes, data-validation lists, named ranges, and merged regions are all restored.
 
-1. Run the `CallImportAllSheetMapsFromMD` macro.
-2. Each `sheet/*.md` file is read and applied to the corresponding sheet: cell values, formulas, background/foreground colors, font sizes, data-validation lists, named ranges, and merged regions are all restored.
+To import only modules and forms (without sheet maps), run `CallImportAllComponents`.  
+To import only sheet maps, run `CallImportAllSheetMapsFromMD`.
 
 ## Prerequisites
 
@@ -112,7 +112,7 @@ This module uses ADODB.Stream and the Win32 API `GetACP()` to keep files on disk
 
 ## Limitations
 
-- `xlsm_devkit` itself is never imported by `CallImportAllComponents` — a running module cannot delete or overwrite itself. To update `xlsm_devkit`, paste the new code manually in the VBE.
+- `xlsm_devkit` itself is never imported by `ImportAllModulesFormsSheetMaps` or `CallImportAllComponents` — a running module cannot delete or overwrite itself. To update `xlsm_devkit`, paste the new code manually in the VBE.
 - Requires Windows and Microsoft Excel with VBA.
 
 ## Tested environment
