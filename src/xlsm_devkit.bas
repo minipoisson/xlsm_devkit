@@ -104,12 +104,12 @@ Sub ImportAllComponents(Optional skipConfirm As Boolean = False)
     End If
 
     Dim successCount As Long, failCount As Long, skipCount As Long
-    ' Move capture is locked when either the registry state exists (Phase 1→2)
-    ' or frmMoveWait is still loaded (e.g. Import called from frmInstruction while
-    ' frmMoveWait is still on screen ? replacing Move.bas would reset the VBA runtime
-    ' and crash Excel because Move.bas is on the active call stack).
+    ' Move capture is locked when either the registry state exists (Phase 1->2)
+    ' or devkit_frmMoveWait is still loaded (e.g. Import called from devkit_frmInstruction while
+    ' devkit_frmMoveWait is still on screen ? replacing devkit_Move.bas would reset the VBA runtime
+    ' and crash Excel because devkit_Move.bas is on the active call stack).
     Dim isMoveLocked As Boolean
-    isMoveLocked = IsFormCurrentlyLoaded("frmMoveWait") Or _
+    isMoveLocked = IsFormCurrentlyLoaded("devkit_frmMoveWait") Or _
                    (Len(GetSetting("xlsm_devkit", "MoveCapture", "State", "")) > 0)
 
     Dim srcFile As Object, ext As String, compName As String
@@ -118,7 +118,7 @@ Sub ImportAllComponents(Optional skipConfirm As Boolean = False)
         compName = Left(srcFile.Name, Len(srcFile.Name) - Len(ext) - 1)
         If ext = "bas" Then
             If compName = MODULE_NAME Then GoTo lblNext              ' xlsm_devkit (self)
-            If compName = "Move" And isMoveLocked Then               ' Move on call stack
+            If compName = "devkit_Move" And isMoveLocked Then         ' devkit_Move on call stack
                 skipCount = skipCount + 1: GoTo lblNext
             End If
             If ComponentExists(compName) Then
@@ -474,7 +474,18 @@ Private Function GenerateSheetMapMarkdown(ws As Worksheet) As String
     
     mapText = "# Sheet Configuration" & vbCrLf
     mapText = mapText & "- VBA CodeName: " & ws.codeName & vbCrLf
-    mapText = mapText & "- Excel UI Name: " & ws.Name & vbCrLf & vbCrLf
+    mapText = mapText & "- Excel UI Name: " & ws.Name & vbCrLf
+    Dim hiddenRowStr As String
+    Dim hiddenColStr As String
+    hiddenRowStr = CollectHiddenRowRanges(ws)
+    hiddenColStr = CollectHiddenColRanges(ws)
+    If Len(hiddenRowStr) > 0 Then
+        mapText = mapText & "- Hidden Rows: " & hiddenRowStr & vbCrLf
+    End If
+    If Len(hiddenColStr) > 0 Then
+        mapText = mapText & "- Hidden Columns: " & hiddenColStr & vbCrLf
+    End If
+    mapText = mapText & vbCrLf
     
     mapText = mapText & "| Address | Name | Value / Label | Formula | Style |" & vbCrLf
     mapText = mapText & "| :--- | :--- | :--- | :--- | :--- |" & vbCrLf
@@ -656,6 +667,10 @@ Private Sub ApplySheetMapMarkdown(ws As Worksheet, mdContent As String)
     Dim slaveAddrs() As String
     Dim masterAddrs() As String
     Dim slaveCount As Long
+    Dim hiddenRowsStr As String
+    Dim hiddenColsStr As String
+    hiddenRowsStr = ""
+    hiddenColsStr = ""
 
     ' Pre-clear cell data, formatting, merges, and validation
     On Error Resume Next
@@ -684,6 +699,10 @@ Private Sub ApplySheetMapMarkdown(ws As Worksheet, mdContent As String)
 
         If Left(line, 10) = "| Address " Then
             inCellTable = True
+        ElseIf Left(line, 15) = "- Hidden Rows: " Then
+            hiddenRowsStr = Trim(Mid(line, 16))
+        ElseIf Left(line, 18) = "- Hidden Columns: " Then
+            hiddenColsStr = Trim(Mid(line, 19))
         ElseIf inCellTable And Left(line, 1) = "|" And Left(line, 5) <> "| :-" Then
             cols = ParseMDTableRow(line)
             If UBound(cols) >= 4 Then
@@ -738,6 +757,9 @@ Private Sub ApplySheetMapMarkdown(ws As Worksheet, mdContent As String)
 
     ' Pass 2: reconstruct merged ranges
     If slaveCount > 0 Then ReconstructMerges ws, slaveAddrs, masterAddrs, slaveCount
+
+    If Len(hiddenRowsStr) > 0 Then ApplyHiddenRows ws, hiddenRowsStr
+    If Len(hiddenColsStr) > 0 Then ApplyHiddenCols ws, hiddenColsStr
 End Sub
 
 Private Function EscapeCellValue(cellValue As String) As String
@@ -914,6 +936,242 @@ Public Sub ExportSheetToMDFile(ws As Worksheet, filePath As String)
     SaveAsUTF8 filePath, GenerateSheetMapMarkdown(ws)
 End Sub
 
+Public Function ColLetterToNum(col As String) As Long
+    Dim n As Long
+    Dim i As Long
+    For i = 1 To Len(col)
+        n = n * 26 + (Asc(UCase(Mid(col, i, 1))) - 64)
+    Next i
+    ColLetterToNum = n
+End Function
+
+Public Function ColNumToLetter(colNum As Long) As String
+    Dim s As String
+    Dim n As Long
+    n = colNum
+    Do While n > 0
+        Dim r As Long
+        r = (n - 1) Mod 26
+        s = Chr(65 + r) & s
+        n = (n - 1) \ 26
+    Loop
+    ColNumToLetter = s
+End Function
+
+Private Function LongArrayToRangeStr(nums() As Long, count As Long) As String
+    If count = 0 Then Exit Function
+    Dim result As String
+    Dim rangeStart As Long
+    Dim rangeEnd As Long
+    Dim i As Long
+    rangeStart = nums(0)
+    rangeEnd = nums(0)
+    For i = 1 To count - 1
+        If nums(i) = rangeEnd + 1 Then
+            rangeEnd = nums(i)
+        Else
+            If Len(result) > 0 Then result = result & ", "
+            result = result & IIf(rangeStart = rangeEnd, _
+                CStr(rangeStart), CStr(rangeStart) & "-" & CStr(rangeEnd))
+            rangeStart = nums(i)
+            rangeEnd = nums(i)
+        End If
+    Next i
+    If Len(result) > 0 Then result = result & ", "
+    result = result & IIf(rangeStart = rangeEnd, _
+        CStr(rangeStart), CStr(rangeStart) & "-" & CStr(rangeEnd))
+    LongArrayToRangeStr = result
+End Function
+
+Private Function ColNumArrayToLetterRangeStr(nums() As Long, count As Long) As String
+    If count = 0 Then Exit Function
+    Dim result As String
+    Dim rangeStart As Long
+    Dim rangeEnd As Long
+    Dim i As Long
+    rangeStart = nums(0)
+    rangeEnd = nums(0)
+    For i = 1 To count - 1
+        If nums(i) = rangeEnd + 1 Then
+            rangeEnd = nums(i)
+        Else
+            If Len(result) > 0 Then result = result & ", "
+            result = result & IIf(rangeStart = rangeEnd, _
+                ColNumToLetter(rangeStart), _
+                ColNumToLetter(rangeStart) & "-" & ColNumToLetter(rangeEnd))
+            rangeStart = nums(i)
+            rangeEnd = nums(i)
+        End If
+    Next i
+    If Len(result) > 0 Then result = result & ", "
+    result = result & IIf(rangeStart = rangeEnd, _
+        ColNumToLetter(rangeStart), _
+        ColNumToLetter(rangeStart) & "-" & ColNumToLetter(rangeEnd))
+    ColNumArrayToLetterRangeStr = result
+End Function
+
+Private Function CollectHiddenRowRanges(ws As Worksheet) As String
+    Dim ur As Range
+    On Error Resume Next
+    Set ur = ws.UsedRange
+    On Error GoTo 0
+    If ur Is Nothing Then Exit Function
+
+    Dim lastRow As Long
+    lastRow = ur.Row + ur.Rows.count - 1
+
+    Dim nums() As Long
+    Dim count As Long
+    ReDim nums(lastRow)
+
+    Dim rr As Long
+    For rr = 1 To lastRow
+        If ws.Rows(rr).Hidden Then
+            nums(count) = rr
+            count = count + 1
+        End If
+    Next rr
+
+    CollectHiddenRowRanges = LongArrayToRangeStr(nums, count)
+End Function
+
+Private Function CollectHiddenColRanges(ws As Worksheet) As String
+    Dim ur As Range
+    On Error Resume Next
+    Set ur = ws.UsedRange
+    On Error GoTo 0
+    If ur Is Nothing Then Exit Function
+
+    Dim lastCol As Long
+    lastCol = ur.Column + ur.Columns.count - 1
+
+    Dim nums() As Long
+    Dim count As Long
+    ReDim nums(lastCol)
+
+    Dim c As Long
+    For c = 1 To lastCol
+        If ws.Columns(c).Hidden Then
+            nums(count) = c
+            count = count + 1
+        End If
+    Next c
+
+    CollectHiddenColRanges = ColNumArrayToLetterRangeStr(nums, count)
+End Function
+
+Private Sub ParseRangeStrToNums(rangeStr As String, ByRef nums() As Long, ByRef count As Long)
+    count = 0
+    ReDim nums(0)
+    Dim parts() As String
+    parts = Split(rangeStr, ",")
+    Dim p As Variant
+    For Each p In parts
+        Dim token As String
+        token = Trim(CStr(p))
+        If Len(token) = 0 Then GoTo NextPart
+        Dim dashPos As Long
+        dashPos = InStr(token, "-")
+        If dashPos > 0 Then
+            Dim fromN As Long
+            Dim toN As Long
+            fromN = CLng(Left(token, dashPos - 1))
+            toN = CLng(Mid(token, dashPos + 1))
+            Dim n As Long
+            For n = fromN To toN
+                ReDim Preserve nums(count)
+                nums(count) = n
+                count = count + 1
+            Next n
+        Else
+            ReDim Preserve nums(count)
+            nums(count) = CLng(token)
+            count = count + 1
+        End If
+NextPart:
+    Next p
+End Sub
+
+Private Function ColLetterRangeStrToNumRangeStr(colRangeStr As String) As String
+    Dim parts() As String
+    parts = Split(colRangeStr, ",")
+    Dim result As String
+    Dim p As Variant
+    For Each p In parts
+        Dim token As String
+        token = Trim(CStr(p))
+        If Len(token) = 0 Then GoTo NextPart
+        If Len(result) > 0 Then result = result & ", "
+        Dim dashPos As Long
+        dashPos = InStr(token, "-")
+        If dashPos > 0 Then
+            result = result & _
+                CStr(ColLetterToNum(Trim(Left(token, dashPos - 1)))) & _
+                "-" & _
+                CStr(ColLetterToNum(Trim(Mid(token, dashPos + 1))))
+        Else
+            result = result & CStr(ColLetterToNum(token))
+        End If
+NextPart:
+    Next p
+    ColLetterRangeStrToNumRangeStr = result
+End Function
+
+Private Sub ApplyHiddenRows(ws As Worksheet, rangeStr As String)
+    Dim nums() As Long
+    Dim count As Long
+    ParseRangeStrToNums rangeStr, nums, count
+    If count = 0 Then Exit Sub
+
+    Dim urLastRow As Long
+    On Error Resume Next
+    urLastRow = ws.UsedRange.Row + ws.UsedRange.Rows.count - 1
+    On Error GoTo 0
+
+    Dim maxRow As Long
+    maxRow = urLastRow
+    Dim i As Long
+    For i = 0 To count - 1
+        If nums(i) > maxRow Then maxRow = nums(i)
+    Next i
+
+    ws.Rows("1:" & maxRow).Hidden = False
+    For i = 0 To count - 1
+        If nums(i) >= 1 And nums(i) <= 1048576 Then
+            ws.Rows(nums(i)).Hidden = True
+        End If
+    Next i
+End Sub
+
+Private Sub ApplyHiddenCols(ws As Worksheet, rangeStr As String)
+    Dim numRangeStr As String
+    numRangeStr = ColLetterRangeStrToNumRangeStr(rangeStr)
+
+    Dim nums() As Long
+    Dim count As Long
+    ParseRangeStrToNums numRangeStr, nums, count
+    If count = 0 Then Exit Sub
+
+    Dim urLastCol As Long
+    On Error Resume Next
+    urLastCol = ws.UsedRange.Column + ws.UsedRange.Columns.count - 1
+    On Error GoTo 0
+
+    Dim maxCol As Long
+    maxCol = urLastCol
+    Dim i As Long
+    For i = 0 To count - 1
+        If nums(i) > maxCol Then maxCol = nums(i)
+    Next i
+
+    ws.Columns("A:" & ColNumToLetter(maxCol)).Hidden = False
+    For i = 0 To count - 1
+        If nums(i) >= 1 And nums(i) <= 16384 Then
+            ws.Columns(nums(i)).Hidden = True
+        End If
+    Next i
+End Sub
+
 Private Function GetSystemAnsiCharset() As String
     Dim cp As Long
     cp = GetACP()
@@ -935,3 +1193,5 @@ Private Function GetSystemAnsiCharset() As String
         Case Else: GetSystemAnsiCharset = "Windows-" & cp
     End Select
 End Function
+
+

@@ -1,14 +1,14 @@
 VERSION 5.00
-Begin {C62A69F0-16DC-11CE-9E98-00AA00574A4F} frmInsertDelete 
+Begin {C62A69F0-16DC-11CE-9E98-00AA00574A4F} devkit_frmInsertDelete
    Caption         =   "Insert/Delete Rows/Columns"
    ClientHeight    =   5440
    ClientLeft      =   110
    ClientTop       =   450
    ClientWidth     =   4580
-   OleObjectBlob   =   "frmInsertDelete.frx":0000
+   OleObjectBlob   =   "devkit_frmInsertDelete.frx":0000
    StartUpPosition =   1  'オーナー フォームの中央
 End
-Attribute VB_Name = "frmInsertDelete"
+Attribute VB_Name = "devkit_frmInsertDelete"
 Attribute VB_GlobalNameSpace = False
 Attribute VB_Creatable = False
 Attribute VB_PredeclaredId = True
@@ -16,7 +16,7 @@ Attribute VB_Exposed = False
 Option Explicit
 
 ' Part of the InsertDelete feature.
-' Requires: InsertDelete.bas (RunInsertDelete)
+' Requires: devkit_InsertDelete.bas (RunInsertDelete)
 
 Private m_selectedSheet As Worksheet
 Private m_isValidN      As Boolean
@@ -37,6 +37,7 @@ Private Sub cboCodeName_Change()
     If m_syncLock Then Exit Sub
     m_syncLock = True
 
+    Dim ws As Object
     For Each ws In ThisWorkbook.Sheets
         If ws.Type = xlWorksheet And ws.codeName = cboCodeName.text Then
             Set m_selectedSheet = ws
@@ -47,7 +48,10 @@ Private Sub cboCodeName_Change()
     m_syncLock = False
     UpdateBtnOK
 End Sub
-    Next i
+
+Private Sub cboSheetName_Change()
+    If m_syncLock Then Exit Sub
+    m_syncLock = True
 
     Set m_selectedSheet = Nothing
     Dim ws As Object
@@ -80,7 +84,7 @@ Private Sub txtN_AfterUpdate()
         End If
     ElseIf IsAllLetters(pos) Then
         Dim cn As Long
-        cn = ColLetterToNumLocal(UCase(pos))
+        cn = ColLetterToNum(UCase(pos))
         If cn >= 1 And cn <= 16384 Then
             m_isValidN = True
             m_isRowMode = False
@@ -108,14 +112,6 @@ Private Function IsAllLetters(s As String) As Boolean
         If Not (Mid(s, i, 1) Like "[A-Za-z]") Then Exit Function
     Next i
     IsAllLetters = True
-End Function
-
-Private Function ColLetterToNumLocal(col As String) As Long
-    Dim n As Long, i As Long
-    For i = 1 To Len(col)
-        n = n * 26 + (Asc(UCase(Mid(col, i, 1))) - 64)
-    Next i
-    ColLetterToNumLocal = n
 End Function
 
 Private Sub txtCount_Change()
@@ -220,19 +216,6 @@ End Sub
 Private Sub UpdateBtnOK()
     btnOK.Enabled = (Not m_selectedSheet Is Nothing) And m_isValidN
 End Sub
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 

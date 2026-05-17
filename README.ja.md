@@ -31,9 +31,9 @@ VBE（Visual Basic Editor）と外部エディタ（VS Code など）を組み�
 
 | ファイル | 役割 |
 | :--- | :--- |
-| `InsertDelete.bas` | 機能ロジック |
-| `frmInsertDelete.frm` + `frmInsertDelete.frx` | セットアップダイアログ |
-| `frmInstruction.frm` + `frmInstruction.frx` | 結果・インポートダイアログ（Move と共用） |
+| `devkit_InsertDelete.bas` | 機能ロジック |
+| `devkit_frmInsertDelete.frm` + `devkit_frmInsertDelete.frx` | セットアップダイアログ |
+| `devkit_frmInstruction.frm` + `devkit_frmInstruction.frx` | 結果・インポートダイアログ（Move と共用） |
 
 エントリポイント: `ShowInsertDeleteForm`
 
@@ -45,10 +45,10 @@ Excel のマクロ記録機能を使ってセル範囲の切り取り・貼り�
 
 | ファイル | 役割 |
 | :--- | :--- |
-| `Move.bas` | 機能ロジック |
-| `frmMoveSetup.frm` + `frmMoveSetup.frx` | セットアップダイアログ |
-| `frmMoveWait.frm` + `frmMoveWait.frx` | 記録中ダイアログ |
-| `frmInstruction.frm` + `frmInstruction.frx` | 結果・インポートダイアログ（InsertDelete と共用） |
+| `devkit_Move.bas` | 機能ロジック |
+| `devkit_frmMoveSetup.frm` + `devkit_frmMoveSetup.frx` | セットアップダイアログ |
+| `devkit_frmMoveWait.frm` + `devkit_frmMoveWait.frx` | 記録中ダイアログ |
+| `devkit_frmInstruction.frm` + `devkit_frmInstruction.frx` | 結果・インポートダイアログ（InsertDelete と共用） |
 
 エントリポイント: `ShowMoveSetupForm`
 

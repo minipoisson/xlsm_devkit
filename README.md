@@ -33,9 +33,9 @@ Required files (all must be imported into the same VBA project):
 
 | File | Role |
 | :--- | :--- |
-| `InsertDelete.bas` | Feature logic |
-| `frmInsertDelete.frm` + `frmInsertDelete.frx` | Setup dialog |
-| `frmInstruction.frm` + `frmInstruction.frx` | Result/import dialog (shared with Move) |
+| `devkit_InsertDelete.bas` | Feature logic |
+| `devkit_frmInsertDelete.frm` + `devkit_frmInsertDelete.frx` | Setup dialog |
+| `devkit_frmInstruction.frm` + `devkit_frmInstruction.frx` | Result/import dialog (shared with Move) |
 
 Entry point: `ShowInsertDeleteForm`
 
@@ -47,10 +47,10 @@ Required files (all must be imported into the same VBA project):
 
 | File | Role |
 | :--- | :--- |
-| `Move.bas` | Feature logic |
-| `frmMoveSetup.frm` + `frmMoveSetup.frx` | Setup dialog |
-| `frmMoveWait.frm` + `frmMoveWait.frx` | Recording dialog |
-| `frmInstruction.frm` + `frmInstruction.frx` | Result/import dialog (shared with InsertDelete) |
+| `devkit_Move.bas` | Feature logic |
+| `devkit_frmMoveSetup.frm` + `devkit_frmMoveSetup.frx` | Setup dialog |
+| `devkit_frmMoveWait.frm` + `devkit_frmMoveWait.frx` | Recording dialog |
+| `devkit_frmInstruction.frm` + `devkit_frmInstruction.frx` | Result/import dialog (shared with InsertDelete) |
 
 Entry point: `ShowMoveSetupForm`
 

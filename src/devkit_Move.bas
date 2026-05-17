@@ -1,20 +1,5 @@
-Attribute VB_Name = "Move"
+Attribute VB_Name = "devkit_Move"
 Option Explicit
-
-' Optional feature: record and document cell-range move operations.
-' Requires the following files in the same VBA project:
-'   xlsm_devkit.bas        - CallExportAllComponents, ExportSheetToMDFile
-'   frmMoveSetup.frm/frx   - setup dialog (shown by ShowMoveSetupForm)
-'   frmMoveWait.frm/frx    - recording dialog (shown by RunMoveCapture)
-'   frmInstruction.frm/frx - result/import dialog (shown by ExecuteMoveCapturePhase2)
-' Entry point: ShowMoveSetupForm
-
-Public Sub ShowMoveSetupForm()
-    If MsgBox("Export all modules and forms to src/?", _
-              vbYesNo + vbDefaultButton2) = vbNo Then Exit Sub
-    CallExportAllComponents True
-    frmMoveSetup.Show
-End Sub
 
 Private Const APP_KEY  As String = "xlsm_devkit"
 Private Const REG_SECT As String = "MoveCapture"
@@ -25,6 +10,21 @@ Private mWsDest           As Worksheet
 Private mShowResultDialog As Boolean
 Private mSnapshot         As Collection
 Private mNewComponentName As String
+
+' Optional feature: record and document cell-range move operations.
+' Requires the following files in the same VBA project:
+'   xlsm_devkit.bas        - CallExportAllComponents, ExportSheetToMDFile
+'   devkit_frmMoveSetup.frm/frx   - setup dialog (shown by ShowMoveSetupForm)
+'   devkit_frmMoveWait.frm/frx    - recording dialog (shown by RunMoveCapture)
+'   devkit_frmInstruction.frm/frx - result/import dialog (shown by ExecuteMoveCapturePhase2)
+' Entry point: ShowMoveSetupForm
+
+Public Sub ShowMoveSetupForm()
+    If MsgBox("Export all modules and forms to src/?", _
+              vbYesNo + vbDefaultButton2) = vbNo Then Exit Sub
+    CallExportAllComponents True
+    devkit_frmMoveSetup.Show
+End Sub
 
 ' ============================================================
 ' Phase 1
@@ -65,7 +65,7 @@ Public Sub RunMoveCapture( _
     ' Persist state to registry before showing form.
     ' Manual macro recording resets the VBA runtime, clearing module-level vars.
     SaveState
-    frmMoveWait.Show vbModeless
+    devkit_frmMoveWait.Show vbModeless
     Exit Sub
 
 ErrExportOld:
@@ -122,7 +122,6 @@ Public Sub ExecuteMoveCapturePhase2()
         MsgBox "No cell move was detected in the recorded macro." & vbLf & _
                "The operation will be cancelled." & vbLf & vbLf & _
                "Recorded code (first 500 chars):" & vbLf & Left(subCode, 500), vbExclamation
-        Call RemoveRecordedCode(newModName, startLine, addedLineCount)
         Call CleanupOldMdFiles(fso, sheetFolder)
         Exit Sub
     End If
@@ -142,15 +141,11 @@ Public Sub ExecuteMoveCapturePhase2()
                      "Continue using the current state of '" & dstSheetName & "' as context (reduced accuracy)?", _
                      vbYesNo + vbDefaultButton2)
         If ans = vbNo Then
-            Call RemoveRecordedCode(newModName, startLine, addedLineCount)
             Call CleanupOldMdFiles(fso, sheetFolder)
             Exit Sub
         End If
         reducedAccuracy = True
     End If
-
-    ' Remove recorded macro code
-    Call RemoveRecordedCode(newModName, startLine, addedLineCount)
 
     ' Export post-move .md files
     On Error GoTo ErrExportMd
@@ -167,11 +162,21 @@ Public Sub ExecuteMoveCapturePhase2()
     instructionText = BuildMoveInstructionText( _
         isSameSheet, srcSheetName, srcRange, dstSheetName, dstRange, _
         mWsSource, mWsDest, reducedAccuracy, unexpectedLines)
+    Dim modDeleteNote As String
+    If newModName <> "" Then
+        modDeleteNote = ChrW(9888) & " The recorded macro module """ & newModName & _
+                        """ is still in the VBA project." & vbCrLf & _
+                        "  Please delete it from the VBE (Alt+F11) when done."
+    Else
+        modDeleteNote = ChrW(9888) & " Recorded macro lines were appended to an existing module." & vbCrLf & _
+                        "  Please delete the recorded lines from the VBE (Alt+F11) when done."
+    End If
+    instructionText = instructionText & vbCrLf & vbCrLf & modDeleteNote
     CopyToClipboard instructionText
     ClearState
     If mShowResultDialog Then
-        frmInstruction.txtInstruction.text = instructionText
-        frmInstruction.Show
+        devkit_frmInstruction.txtInstruction.text = instructionText
+        devkit_frmInstruction.Show
     End If
     Exit Sub
 
@@ -246,7 +251,7 @@ Private Function IdentifyRecordedCode( _
     Dim snapNames As Object
     Set snapNames = CreateObject("Scripting.Dictionary")
     Dim i As Long
-    For i = 1 To mSnapshot.Count
+    For i = 1 To mSnapshot.count
         Dim snapItem As Variant
         snapItem = mSnapshot(i)
         snapNames(snapItem(0)) = i
@@ -303,7 +308,7 @@ Private Sub RemoveRecordedCode(newModName As String, startLine As Long, addedLin
     ElseIf startLine > 0 And addedLineCount > 0 Then
         ' Case B: find the module whose lines changed and delete the added lines
         Dim i As Long
-        For i = 1 To mSnapshot.Count
+        For i = 1 To mSnapshot.count
             Dim si As Variant
             si = mSnapshot(i)
             Dim c As Object
@@ -658,7 +663,7 @@ Private Sub SaveState()
     ' Serialize: srcCodeName|dstCodeName|showDialog|name,lines;name,lines;...
     Dim snapStr As String
     Dim i As Long
-    For i = 1 To mSnapshot.Count
+    For i = 1 To mSnapshot.count
         Dim si As Variant: si = mSnapshot(i)
         If i > 1 Then snapStr = snapStr & ";"
         snapStr = snapStr & si(0) & "," & CStr(si(3))
@@ -720,12 +725,4 @@ Private Sub ClearState()
     DeleteSetting APP_KEY, REG_SECT
     On Error GoTo 0
 End Sub
-
-
-
-
-
-
-
-
 

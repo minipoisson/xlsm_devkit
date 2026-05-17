@@ -1,18 +1,18 @@
-Attribute VB_Name = "InsertDelete"
+Attribute VB_Name = "devkit_InsertDelete"
 Option Explicit
 
 ' Optional feature: insert or delete rows/columns with sheet-map snapshots.
 ' Requires the following files in the same VBA project:
 '   xlsm_devkit.bas         - CallExportAllComponents, ExportSheetToMDFile
-'   frmInsertDelete.frm/frx - setup dialog (shown by ShowInsertDeleteForm)
-'   frmInstruction.frm/frx  - result/import dialog (shown by RunInsertDelete)
+'   devkit_frmInsertDelete.frm/frx - setup dialog (shown by ShowInsertDeleteForm)
+'   devkit_frmInstruction.frm/frx  - result/import dialog (shown by RunInsertDelete)
 ' Entry point: ShowInsertDeleteForm
 
 Public Sub ShowInsertDeleteForm()
     If MsgBox("Export all modules, and forms to src/ and sheet/?", _
               vbYesNo + vbDefaultButton2) = vbNo Then Exit Sub
     CallExportAllComponents True
-    frmInsertDelete.Show
+    devkit_frmInsertDelete.Show
 End Sub
 
 Public Sub RunInsertDelete( _
@@ -92,8 +92,8 @@ Public Sub RunInsertDelete( _
 
     ' Step 7: Show frmInstruction if requested
     If showResultDialog Then
-        frmInstruction.txtInstruction.text = instructionText
-        frmInstruction.Show
+        devkit_frmInstruction.txtInstruction.text = instructionText
+        devkit_frmInstruction.Show
     End If
     Exit Sub
 
@@ -122,28 +122,6 @@ Private Function IsRowPosition(pos As String) As Boolean
         If Mid(pos, i, 1) < "0" Or Mid(pos, i, 1) > "9" Then Exit Function
     Next i
     IsRowPosition = True
-End Function
-
-Private Function ColLetterToNum(col As String) As Long
-    Dim n As Long
-    Dim i As Long
-    For i = 1 To Len(col)
-        n = n * 26 + (Asc(UCase(Mid(col, i, 1))) - 64)
-    Next i
-    ColLetterToNum = n
-End Function
-
-Private Function ColNumToLetter(colNum As Long) As String
-    Dim s As String
-    Dim n As Long
-    n = colNum
-    Do While n > 0
-        Dim r As Long
-        r = (n - 1) Mod 26
-        s = Chr(65 + r) & s
-        n = (n - 1) \ 26
-    Loop
-    ColNumToLetter = s
 End Function
 
 Private Sub CopyToClipboard(text As String)
@@ -229,3 +207,5 @@ Private Function BuildInstructionText( _
 
     BuildInstructionText = t
 End Function
+
+
