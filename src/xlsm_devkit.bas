@@ -26,7 +26,7 @@ Private Declare Function GetLocaleInfoA Lib "kernel32" ( _
 Private Const MODULE_NAME As String = "xlsm_devkit"
 ' Set True to skip optional devkit feature modules on import (recommended for users).
 ' Set False when developing devkit optional modules themselves.
-Private Const SKIP_DEVKIT_MODULES As Boolean = False
+Private Const SKIP_DEVKIT_MODULES As Boolean = True
 
 Public g_LangCode  As String
 Public g_LangCache As Object
@@ -90,6 +90,9 @@ Sub ExportAllComponents(Optional skipConfirm As Boolean = False)
 
     Dim comp As Object, expPath As String, frxPath As String
     For Each comp In ThisWorkbook.VBProject.VBComponents
+        If SKIP_DEVKIT_MODULES And (Left(comp.Name, 7) = "devkit_" _
+        Or Left(comp.Name, 11) = "xlsm_devkit") Then GoTo lblNext
+        
         If comp.Type = 3 Then
             expPath = dirPath & "\" & comp.Name & ".frm"
             frxPath = dirPath & "\" & comp.Name & ".frx"
@@ -99,7 +102,8 @@ Sub ExportAllComponents(Optional skipConfirm As Boolean = False)
         End If
         comp.Export expPath
         ConvertEncoding expPath, GetSystemAnsiCharset(), "UTF-8", (comp.Type = 3)
-    Next
+lblNext:
+    Next comp
     MsgBox t("msg.export_complete", "Export complete.")
 End Sub
 
@@ -1315,19 +1319,30 @@ NextINILine:
     Set ParseINI = dict
 End Function
 
-' Detects the system UI language code (ISO 639-1) and checks for a matching lang INI file.
-' Falls back to "en" if no matching file exists.
+' Detects the system UI language and checks for a matching lang INI file.
+' Priority: lang\<lang>-<region>.ini  ->  lang\<lang>.ini  ->  "en"
 Private Function DetectSystemLang() As String
-    Const LOCALE_USER_DEFAULT As Long = &H400
-    Const LOCALE_SISO639LANGNAME As Long = &H59
-    Dim buf As String: buf = Space(10)
-    Dim nLen As Long
-    nLen = GetLocaleInfoA(LOCALE_USER_DEFAULT, LOCALE_SISO639LANGNAME, buf, Len(buf))
-    If nLen > 1 Then
-        Dim code As String: code = LCase(Left(buf, nLen - 1))
+    Const LOCALE_USER_DEFAULT     As Long = &H400
+    Const LOCALE_SISO639LANGNAME  As Long = &H59
+    Const LOCALE_SISO3166CTRYNAME As Long = &H5A
+    Dim bufLang As String: bufLang = Space(10)
+    Dim bufCtry As String: bufCtry = Space(10)
+    Dim nLang As Long, nCtry As Long
+    nLang = GetLocaleInfoA(LOCALE_USER_DEFAULT, LOCALE_SISO639LANGNAME, bufLang, Len(bufLang))
+    nCtry = GetLocaleInfoA(LOCALE_USER_DEFAULT, LOCALE_SISO3166CTRYNAME, bufCtry, Len(bufCtry))
+    If nLang > 1 Then
+        Dim langCode As String: langCode = LCase(Left(bufLang, nLang - 1))
         Dim fso As Object: Set fso = CreateObject("Scripting.FileSystemObject")
-        If fso.FileExists(ThisWorkbook.Path & "\lang\" & code & ".ini") Then
-            DetectSystemLang = code: Exit Function
+        Dim langDir As String: langDir = ThisWorkbook.Path & "\lang\"
+        If nCtry > 1 Then
+            Dim combined As String
+            combined = langCode & "-" & LCase(Left(bufCtry, nCtry - 1))
+            If fso.FileExists(langDir & combined & ".ini") Then
+                DetectSystemLang = combined: Exit Function
+            End If
+        End If
+        If fso.FileExists(langDir & langCode & ".ini") Then
+            DetectSystemLang = langCode: Exit Function
         End If
     End If
     DetectSystemLang = "en"
@@ -1354,5 +1369,3 @@ Private Function GetSystemAnsiCharset() As String
         Case Else: GetSystemAnsiCharset = "Windows-" & cp
     End Select
 End Function
-
-

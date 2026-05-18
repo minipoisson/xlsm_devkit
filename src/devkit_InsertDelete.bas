@@ -9,7 +9,8 @@ Option Explicit
 ' Entry point: ShowInsertDeleteForm
 
 Public Sub ShowInsertDeleteForm()
-    If MsgBox("Export all modules, and forms to src/ and sheet/?", _
+    If MsgBox(t("msg.export_all_confirm", _
+                "Export all modules, forms, and sheet maps to src/ and sheet/?"), _
               vbYesNo + vbDefaultButton2) = vbNo Then Exit Sub
     CallExportAllComponents True
     devkit_frmInsertDelete.Show
@@ -48,8 +49,9 @@ Public Sub RunInsertDelete( _
 
     ' Step 1: .old.md existence check
     If fso.FileExists(oldMdPath) Then
-        If MsgBox("sheet\" & ws.codeName & ".old.md already exists." & vbLf & _
-                  "Overwrite and continue?", vbYesNo + vbDefaultButton2) = vbNo Then
+        If MsgBox(Fmt(t("msg.overwrite_old_md", _
+                       "sheet\{0}.old.md already exists. Overwrite and continue?"), _
+                     ws.codeName), vbYesNo + vbDefaultButton2) = vbNo Then
             Exit Sub
         End If
     End If
@@ -103,15 +105,16 @@ ErrHandler3:
     On Error Resume Next
     If fso.FileExists(oldMdPath) Then fso.DeleteFile oldMdPath, True
     On Error GoTo 0
-    MsgBox "Operation failed: " & errMsg3, vbExclamation
+    MsgBox Fmt(t("msg.operation_failed", "Operation failed: {0}"), errMsg3), vbExclamation
     Exit Sub
 
 ErrHandler4:
     Dim errMsg4 As String
     errMsg4 = Err.Description
     On Error GoTo 0
-    MsgBox "Warning: The Excel operation succeeded but the sheet export failed." & vbLf & _
-           "The .old.md file has been retained.", vbExclamation
+    MsgBox t("msg.export_warning", _
+             "? The Excel operation succeeded but the sheet export failed. The .old.md file has been retained."), _
+           vbExclamation
     Exit Sub
 End Sub
 
@@ -205,10 +208,12 @@ Private Function BuildInstructionText( _
         t = t & "  Please list these as warnings."
     End If
 
+    Dim langName As String: langName = GetLangMeta("english_name")
+    If Len(langName) = 0 Then langName = GetLangMeta("native_name")
+    If Len(langName) > 0 And langName <> "English" Then
+        t = t & vbCrLf & vbCrLf & "Please respond in " & langName & "."
+    End If
+    
     BuildInstructionText = t
 End Function
-
-
-
-
 

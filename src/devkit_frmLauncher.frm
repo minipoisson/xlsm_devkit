@@ -1,7 +1,7 @@
 VERSION 5.00
 Begin {C62A69F0-16DC-11CE-9E98-00AA00574A4F} devkit_frmLauncher 
    Caption         =   "Launcher"
-   ClientHeight    =   4640
+   ClientHeight    =   5790
    ClientLeft      =   110
    ClientTop       =   450
    ClientWidth     =   4580
@@ -35,6 +35,9 @@ Private Sub UserForm_Initialize()
     btnImpAllModulesForms.Caption = strMF
     btnImpAllSheets.Caption = strS
     
+    btnInsertDelete.Caption = t("frmLauncher.btn_insert_delete", "Insert / Delete")
+    btnMoveSetup.Caption = t("frmLauncher.btn_move_setup", "Move Setup")
+
     If GetLangMeta("rtl") = "true" Then Me.RightToLeft = True
 
     PopulateLangList
@@ -102,31 +105,45 @@ Private Sub cboLang_Change()
 End Sub
 
 Private Sub btnExpAll_Click()
-    ExportAllModulesFormsSheetMaps
+    Application.OnTime Now, "ExportAllModulesFormsSheetMaps"
+    Unload Me
 End Sub
 
 Private Sub btnExpAllModulesForms_Click()
-    CallExportAllComponents
+    Application.OnTime Now, "CallExportAllComponents"
+    Unload Me
 End Sub
 
 Private Sub btnExpAllSheets_Click()
-    CallExportAllSheetMapsToMD
+    Application.OnTime Now, "CallExportAllSheetMapsToMD"
+    Unload Me
 End Sub
 
 Private Sub btnImpAll_Click()
-    ImportAllModulesFormsSheetMaps
+    Application.OnTime Now, "ImportAllModulesFormsSheetMaps"
+    Unload Me
 End Sub
 
 Private Sub btnImpAllModulesForms_Click()
-    CallImportAllComponents
+    Application.OnTime Now, "CallImportAllComponents"
+    Unload Me
 End Sub
 
 Private Sub btnImpAllSheets_Click()
-    CallImportAllSheetMapsFromMD
+    Application.OnTime Now, "CallImportAllSheetMapsFromMD"
+    Unload Me
+End Sub
+
+Private Sub btnInsertDelete_Click()
+    Application.OnTime Now, "RunShowInsertDeleteForm"
+    Unload Me
+End Sub
+
+Private Sub btnMoveSetup_Click()
+    Application.OnTime Now, "RunShowMoveSetupForm"
+    Unload Me
 End Sub
 
 Private Sub btnClose_Click()
     Unload Me
 End Sub
-
-

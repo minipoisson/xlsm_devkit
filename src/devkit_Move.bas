@@ -624,6 +624,12 @@ Private Function BuildMoveInstructionText( _
         t = t & "  Please review whether these affect any VBA references:" & vbCrLf & vbCrLf
         t = t & unexpectedLines
     End If
+    
+    Dim langName As String: langName = GetLangMeta("english_name")
+    If Len(langName) = 0 Then langName = GetLangMeta("native_name")
+    If Len(langName) > 0 And langName <> "English" Then
+        t = t & vbCrLf & vbCrLf & "Please respond in " & langName & "."
+    End If
 
     If reducedAccuracy Then
         t = t & vbCrLf & vbCrLf
@@ -722,5 +728,4 @@ Private Sub ClearState()
     DeleteSetting APP_KEY, REG_SECT
     On Error GoTo 0
 End Sub
-
 

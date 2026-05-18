@@ -54,6 +54,32 @@ Required files (all must be imported into the same VBA project):
 
 Entry point: `ShowMoveSetupForm`
 
+### Launcher
+
+A central dialog that exposes all import/export operations in one place and lets users switch the UI language. Buttons for InsertDelete and Move also appear when those modules are loaded.
+
+Required files (all must be imported into the same VBA project):
+
+| File | Role |
+| :--- | :--- |
+| `devkit_Launch.bas` | Feature logic |
+| `devkit_frmLauncher.frm` + `devkit_frmLauncher.frx` | Launcher dialog |
+
+Entry point: `ShowLauncherForm`
+
+### Internationalization
+
+UI text in all optional-feature dialogs is localized via INI-based language files. The i18n functions (`t()`, `Fmt()`, `SetLang()`, `GetLangCode()`) are built into `xlsm_devkit.bas` — no additional VBA module is required. Place the `lang/` folder next to the workbook to enable localization.
+
+27 languages are bundled: Arabic, Bengali, English, Spanish, Persian, French, German, Hindi, Indonesian, Japanese, Javanese, Korean, Malay, Marathi, Portuguese, Punjabi, Russian, Swahili, Tamil, Telugu, Thai, Turkish, Ukrainian, Urdu, Vietnamese, Simplified Chinese, and Traditional Chinese.
+
+The active language is auto-detected from Windows. It can be overridden via the Launcher's language selector or programmatically:
+
+```vba
+SetLang "ja"   ' switch to Japanese
+SetLang ""     ' revert to system auto-detection
+```
+
 ## Usage
 
 ### Initial setup (add to a new workbook)
@@ -113,6 +139,8 @@ This module uses ADODB.Stream and the Win32 API `GetACP()` to keep files on disk
 ## Limitations
 
 - `xlsm_devkit` itself is never imported by `ImportAllModulesFormsSheetMaps` or `CallImportAllComponents` — a running module cannot delete or overwrite itself. To update `xlsm_devkit`, paste the new code manually in the VBE.
+- When `SKIP_DEVKIT_MODULES = True` (the default): `devkit_*` optional modules and forms are skipped during both import and export, and `xlsm_devkit` itself is also skipped during export. Set `SKIP_DEVKIT_MODULES = False` inside `xlsm_devkit.bas` when developing the optional devkit modules.
+- While a Move capture is in progress, `devkit_Move` cannot be reimported — it is on the active call stack, and reimporting would reset the VBA runtime and crash Excel.
 - Requires Windows and Microsoft Excel with VBA.
 
 ## Tested environment

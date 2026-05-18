@@ -4,6 +4,30 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-05-18
+
+### Added
+- i18n support: INI-based language files under `lang/`; `T(key)` for localized
+  string lookup and `Fmt(template, args…)` for `{0}`/`{1}` placeholder
+  substitution. Built into `xlsm_devkit.bas` — no additional module required.
+- `SetLang(code)` / `GetLangCode()` — set or query the active language at
+  runtime; pass `""` to revert to auto-detection.
+- `DetectSystemLang()` — resolves the Windows locale to a language code; checks
+  `lang\<lang>-<region>.ini` (e.g. `zh-CN.ini`) first via
+  `LOCALE_SISO3166CTRYNAME`, then `lang\<lang>.ini`, then falls back to `"en"`.
+- `devkit_frmLauncher` redesigned as a full-featured launcher: exposes all
+  import/export operations (all modules + forms + sheet maps; modules + forms
+  only; sheet maps only) and a language-selector drop-down. InsertDelete and
+  Move buttons appear automatically when those optional modules are loaded.
+- 27 languages bundled in `lang/`: Arabic (`ar`), Bengali (`bn`), English
+  (`en`), Spanish (`es`), Persian (`fa`), French (`fr`), German (`de`),
+  Hindi (`hi`), Indonesian (`id`), Japanese (`ja`), Javanese (`jv`),
+  Korean (`ko`), Malay (`ms`), Marathi (`mr`), Portuguese (`pt`),
+  Punjabi (`pa`), Russian (`ru`), Swahili (`sw`), Tamil (`ta`), Telugu (`te`),
+  Thai (`th`), Turkish (`tr`), Ukrainian (`uk`), Urdu (`ur`),
+  Vietnamese (`vi`), Simplified Chinese (`zh-CN`), Traditional Chinese
+  (`zh-TW`).
+
 ## [1.3.0] - 2026-05-17
 
 ### Added

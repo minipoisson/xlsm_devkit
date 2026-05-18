@@ -48,10 +48,12 @@ Private Sub cboCodeName_Change()
     If m_syncLock Then Exit Sub
     m_syncLock = True
 
+    Set m_selectedSheet = Nothing
     Dim ws As Object
     For Each ws In ThisWorkbook.Sheets
         If ws.Type = xlWorksheet And ws.codeName = cboCodeName.text Then
             Set m_selectedSheet = ws
+            cboSheetName.text = ws.Name
             Exit For
         End If
     Next ws
@@ -69,6 +71,7 @@ Private Sub cboSheetName_Change()
     For Each ws In ThisWorkbook.Sheets
         If ws.Type = xlWorksheet And ws.Name = cboSheetName.text Then
             Set m_selectedSheet = ws
+            cboCodeName.text = ws.codeName
             Exit For
         End If
     Next ws
