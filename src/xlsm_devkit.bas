@@ -31,6 +31,7 @@ Private Const SKIP_DEVKIT_MODULES As Boolean = True
 Public g_LangCode  As String
 Public g_LangCache As Object
 Public g_EnCache   As Object
+Private m_LangCodeDetected As String
 
 ' NOTE: This module itself is NOT imported by ImportAllComponents()
 ' because a module cannot delete or overwrite itself.
@@ -1275,7 +1276,10 @@ Public Function GetLangCode() As String
     Dim code As String
     code = GetSetting("xlsm_devkit", "Language", "Code", "")
     If Len(code) > 0 Then GetLangCode = code: Exit Function
-    GetLangCode = DetectSystemLang()
+    If m_LangCodeDetected = "" Then
+        m_LangCodeDetected = DetectSystemLang()
+    End If
+    GetLangCode = m_LangCodeDetected
 End Function
 
 ' Returns a value from the [meta] section of the current language INI.

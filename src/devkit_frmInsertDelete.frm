@@ -26,6 +26,19 @@ Private m_syncLock      As Boolean
 
 Private Sub UserForm_Initialize()
     Me.Caption = t("frmInsertDelete.caption", "Insert/Delete Rows/Columns")
+    frameWs.Caption = t("frmInsertDelete.frame_ws", "Worksheet")
+    lblCodeName.Caption = t("frmInsertDelete.code_name", "Code Name")
+    lblSheetName.Caption = t("frmInsertDelete.sheet_name", "Sheet Name")
+    frameStart.Caption = t("frmInsertDelete.frame_start", "Start Row/Column")
+    lblRowName.Caption = t("frmInsertDelete.lbl_row_name", "Row: 1 to 1048576")
+    lblColName.Caption = t("frmInsertDelete.lbl_col_name", "Column: A to XFD")
+    lblRecognized.Caption = t("frmInsertDelete.lbl_recognized", "(Enter a row number or column letter)")
+    frameInsDel.Caption = t("frmInsertDelete.frame_ins_del", "Insert/Delete")
+    optInsert.Caption = t("frmInsertDelete.opt_insert", "Insert")
+    optDelete.Caption = t("frmInsertDelete.opt_delete", "Delete")
+    frameCount.Caption = t("frmInsertDelete.frame_count", "Number of Rows/Columns")
+    lblRowCount.Caption = t("frmInsertDelete.lbl_row_count", "1-9999 rows/columns")
+    lblAction.Caption = t("frmInsertDelete.lbl_action", "Planned Action")
     btnOK.Caption = t("frmInsertDelete.btn_ok", "OK")
     btnCancel.Caption = t("frmInsertDelete.btn_cancel", "Cancel")
     If GetLangMeta("rtl") = "true" Then Me.RightToLeft = True
@@ -127,6 +140,14 @@ Private Function IsAllLetters(s As String) As Boolean
     Next i
     IsAllLetters = True
 End Function
+
+Private Sub optDelete_Click()
+    UpdateLabels
+End Sub
+
+Private Sub optInsert_Click()
+    UpdateLabels
+End Sub
 
 Private Sub txtCount_Change()
     Dim s As String
