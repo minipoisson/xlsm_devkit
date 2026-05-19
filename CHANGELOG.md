@@ -4,6 +4,27 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-05-20
+
+### Added
+- i18n for `devkit_frmInsertDelete`: all labels, buttons, and action strings localized
+  across 27 languages using the existing `T()` / `Fmt()` API.
+- i18n for `devkit_frmMoveSetup`: 8 keys (`caption`, `frame_src_ws`,
+  `lbl_code_name_src`, `lbl_sheet_name_src`, `frame_dst_ws`, `lbl_code_name_dst`,
+  `lbl_sheet_name_dst`, `btn_ok`, `btn_cancel`, `discard_confirm`) added across
+  all 27 language files.
+- `msg.optional_module_missing` key added to all 27 language files; displayed when
+  a launcher button is pressed but the corresponding optional module is not loaded.
+
+### Changed
+- `GetLangCode` now caches the OS language detection result in `m_LangCodeDetected`
+  to avoid repeated `GetLocaleInfoA` calls within a single session.
+
+### Fixed
+- `SaveAsUTF8` (used by all export paths — `.bas`, `.frm`, `.md`) now normalizes
+  trailing newlines: strips extra blank lines appended by Excel's VBA exporter and
+  ensures each file ends with exactly one CRLF.
+
 ## [1.4.0] - 2026-05-18
 
 ### Added

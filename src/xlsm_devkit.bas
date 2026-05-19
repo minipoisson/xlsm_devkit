@@ -833,6 +833,16 @@ Private Function NormalizeStartUpPosition(content As String) As String
 End Function
 
 Private Sub SaveAsUTF8(filePath As String, content As String)
+    ' Normalize trailing blank lines: strip extra CRLFs appended by Excel's VBA exporter,
+    ' then ensure exactly one CRLF at end of file.
+    Do While Len(content) >= 2 And Right(content, 2) = vbCrLf
+        content = Left(content, Len(content) - 2)
+    Loop
+    Do While Len(content) >= 1 And (Right(content, 1) = vbCr Or Right(content, 1) = vbLf)
+        content = Left(content, Len(content) - 1)
+    Loop
+    content = content & vbCrLf
+
     ' ADODB.Stream always prepends a 3-byte UTF-8 BOM; strip it via binary copy.
     Dim stText As Object
     Set stText = CreateObject("ADODB.Stream")
@@ -1373,3 +1383,5 @@ Private Function GetSystemAnsiCharset() As String
         Case Else: GetSystemAnsiCharset = "Windows-" & cp
     End Select
 End Function
+
+
