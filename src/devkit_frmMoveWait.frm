@@ -53,6 +53,3 @@ Private Sub UserForm_QueryClose(Cancel As Integer, CloseMode As Integer)
         btnCancel_Click
     End If
 End Sub
-
-
-

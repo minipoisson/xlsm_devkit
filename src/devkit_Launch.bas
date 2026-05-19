@@ -37,6 +37,3 @@ Public Sub RunShowInsertDeleteForm()
         Err.Raise e
     End If
 End Sub
-
-
-

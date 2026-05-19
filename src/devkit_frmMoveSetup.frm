@@ -195,4 +195,3 @@ End Sub
 Private Sub UpdateBtnOK()
     btnOK.Enabled = Not (m_selectedSrcSheet Is Nothing)
 End Sub
-

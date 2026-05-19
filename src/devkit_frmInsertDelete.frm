@@ -246,4 +246,3 @@ End Sub
 Private Sub UpdateBtnOK()
     btnOK.Enabled = (Not m_selectedSheet Is Nothing) And m_isValidN
 End Sub
-

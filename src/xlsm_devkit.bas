@@ -1383,5 +1383,3 @@ Private Function GetSystemAnsiCharset() As String
         Case Else: GetSystemAnsiCharset = "Windows-" & cp
     End Select
 End Function
-
-

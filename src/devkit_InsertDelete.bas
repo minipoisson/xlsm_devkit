@@ -216,6 +216,3 @@ Private Function BuildInstructionText( _
     
     BuildInstructionText = t
 End Function
-
-
-

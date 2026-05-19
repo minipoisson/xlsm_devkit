@@ -728,6 +728,3 @@ Private Sub ClearState()
     DeleteSetting APP_KEY, REG_SECT
     On Error GoTo 0
 End Sub
-
-
-

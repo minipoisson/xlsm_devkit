@@ -55,6 +55,3 @@ End Sub
 Private Sub btnClose_Click()
     Unload Me
 End Sub
-
-
-
