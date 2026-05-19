@@ -25,8 +25,14 @@ Private m_syncLockDst      As Boolean
 
 Private Sub UserForm_Initialize()
     Me.Caption = t("frmMoveSetup.caption", "Cell Range Move - Setup")
-    btnOK.Caption = t("frmInsertDelete.btn_ok", "OK")
-    btnCancel.Caption = t("frmInsertDelete.btn_cancel", "Cancel")
+    frameSrcWs.Caption = t("frmMoveSetup.frame_src_ws", "Source Worksheet")
+    lblCodeNameSrc.Caption = t("frmMoveSetup.lbl_code_name_src", "Code Name")
+    lblSheetNameSrc.Caption = t("frmMoveSetup.lbl_sheet_name_src", "Sheet Name")
+    frameDstWs.Caption = t("frmMoveSetup.frame_dst_ws", "Destination Worksheet")
+    lblCodeNameDst.Caption = t("frmMoveSetup.lbl_code_name_dst", "Code Name")
+    lblSheetNameDst.Caption = t("frmMoveSetup.lbl_sheet_name_dst", "Sheet Name")
+    btnOK.Caption = t("frmMoveSetup.btn_ok", "OK")
+    btnCancel.Caption = t("frmMoveSetup.btn_cancel", "Cancel")
     If GetLangMeta("rtl") = "true" Then Me.RightToLeft = True
 
     Dim ws As Object
@@ -189,6 +195,4 @@ End Sub
 Private Sub UpdateBtnOK()
     btnOK.Enabled = Not (m_selectedSrcSheet Is Nothing)
 End Sub
-
-
 
