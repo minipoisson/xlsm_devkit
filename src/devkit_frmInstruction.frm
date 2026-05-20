@@ -23,6 +23,11 @@ Private Sub UserForm_Initialize()
     btnCopy.Caption = t("frmInstruction.btn_copy", "Copy")
     btnImport.Caption = t("frmInstruction.btn_import", "Import")
     btnClose.Caption = t("frmInstruction.btn_close", "Close")
+    lblInstruction.Caption = t("frmInstruction.lbl_instruction", _
+        "The instruction below has been copied to the clipboard." & vbLf & _
+        "Paste it into an AI chat panel (e.g., GitHub Copilot, Claude Code, Codex) in VS Code or compatible products and send it.")
+    lblImportNote.Caption = t("frmInstruction.lbl_import_note", _
+        "!!! Save all changes in VS Code (Ctrl+K S) before importing !!!")
     If GetLangMeta("rtl") = "true" Then Me.RightToLeft = True
 End Sub
 

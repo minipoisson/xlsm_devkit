@@ -162,12 +162,14 @@ Public Sub ExecuteMoveCapturePhase2()
         mWsSource, mWsDest, reducedAccuracy, unexpectedLines)
     Dim modDeleteNote As String
     If newModName <> "" Then
-        modDeleteNote = ChrW(9888) & " The recorded macro module """ & newModName & _
-                        """ is still in the VBA project." & vbCrLf & _
-                        "  Please delete it from the VBE (Alt+F11) when done."
+        modDeleteNote = ChrW(9888) & " Module """ & newModName & _
+                        """ was created by Excel's macro recorder and is not part of your source." & vbCrLf & _
+                        "  VS Code: delete src\" & newModName & ".bas -- do not commit this recorded macro file." & vbCrLf & _
+                        "  VBE: after this dialog closes (Import or Close), open VBE (Alt+F11) and delete the """ & newModName & """ module."
     Else
-        modDeleteNote = ChrW(9888) & " Recorded macro lines were appended to an existing module." & vbCrLf & _
-                        "  Please delete the recorded lines from the VBE (Alt+F11) when done."
+        modDeleteNote = ChrW(9888) & " Excel's macro recorder appended recorded code to an existing module." & vbCrLf & _
+                        "  VS Code: remove the recorded Sub Macro* ... End Sub block from the .bas file -- do not commit it." & vbCrLf & _
+                        "  VBE: after this dialog closes (Import or Close), open VBE (Alt+F11) and delete those recorded macro lines."
     End If
     instructionText = instructionText & vbCrLf & vbCrLf & modDeleteNote
     CopyToClipboard instructionText

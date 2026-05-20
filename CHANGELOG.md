@@ -7,6 +7,8 @@ All notable changes to this project will be documented in this file.
 ## [1.4.1] - 2026-05-20
 
 ### Added
+- i18n for `devkit_frmInstruction`: `lbl_instruction` and `lbl_import_note` labels now
+  localized across all 27 language files (`[frmInstruction]` section).
 - i18n for `devkit_frmInsertDelete`: all labels, buttons, and action strings localized
   across 27 languages using the existing `T()` / `Fmt()` API.
 - i18n for `devkit_frmMoveSetup`: 8 keys (`caption`, `frame_src_ws`,
@@ -21,6 +23,9 @@ All notable changes to this project will be documented in this file.
   to avoid repeated `GetLocaleInfoA` calls within a single session.
 
 ### Fixed
+- Move: `modDeleteNote` instruction text rewritten with `VS Code:` / `VBE:` action
+  prefixes so that VS Code AI correctly deletes `src\<module>.bas` rather than
+  misinterpreting the VBE-deletion instruction as applying to source files.
 - `SaveAsUTF8` (used by all export paths — `.bas`, `.frm`, `.md`) now normalizes
   trailing newlines: strips extra blank lines appended by Excel's VBA exporter and
   ensures each file ends with exactly one CRLF.
