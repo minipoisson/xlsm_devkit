@@ -11,7 +11,7 @@ All notable changes to this project will be documented in this file.
   localized across all 27 language files (`[frmInstruction]` section).
 - i18n for `devkit_frmInsertDelete`: all labels, buttons, and action strings localized
   across 27 languages using the existing `T()` / `Fmt()` API.
-- i18n for `devkit_frmMoveSetup`: 8 keys (`caption`, `frame_src_ws`,
+- i18n for `devkit_frmMoveSetup`: 10 keys (`caption`, `frame_src_ws`,
   `lbl_code_name_src`, `lbl_sheet_name_src`, `frame_dst_ws`, `lbl_code_name_dst`,
   `lbl_sheet_name_dst`, `btn_ok`, `btn_cancel`, `discard_confirm`) added across
   all 27 language files.
