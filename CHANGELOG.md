@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.4.2] - 2026-05-28
+
+### Fixed
+- `devkit_frmInstruction`: renamed the `lblInstruction` label control in the form
+  binary (was stored as `Label1`), fixing a runtime error introduced in v1.4.1
+  where `UserForm_Initialize` sets `lblInstruction.Caption` but the control did
+  not exist under that name.
+
 ## [1.4.1] - 2026-05-20
 
 ### Added
