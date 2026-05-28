@@ -8,3 +8,4 @@ src/Sheet*.bas
 src/*.log
 sheet/
 SESSION_BOOTSTRAP.md
+.continue/
