@@ -312,18 +312,21 @@ Private Function StripAttributeLines(ByVal codeText As String) As String
     Dim lines() As String
     lines = Split(normalized, vbLf)
 
+    Dim outLines() As String
+    ReDim outLines(UBound(lines))
+    Dim outCount As Long
+
     Dim i As Long
-    Dim output As String
-    Dim lineText As String
     For i = LBound(lines) To UBound(lines)
-        lineText = lines(i)
-        If Left$(LCase$(Trim$(lineText)), 13) <> "attribute vb_" Then
-            If Len(output) > 0 Then output = output & vbCrLf
-            output = output & lineText
+        If Left$(LCase$(Trim$(lines(i))), 13) <> "attribute vb_" Then
+            outLines(outCount) = lines(i)
+            outCount = outCount + 1
         End If
     Next i
 
-    StripAttributeLines = output
+    If outCount = 0 Then Exit Function
+    ReDim Preserve outLines(outCount - 1)
+    StripAttributeLines = Join(outLines, vbCrLf)
 End Function
 
 Private Sub RenameModuleInFile(filePath As String, oldName As String, newName As String)
@@ -534,7 +537,8 @@ Private Function GenerateSheetMapMarkdown(ws As Worksheet) As String
     mapText = mapText & "| :--- | :--- | :--- | :--- | :--- |" & vbCrLf
     
     For Each rng In ws.UsedRange
-        If rng.MergeCells And Not (rng.Row = rng.MergeArea.Row And rng.Column = rng.MergeArea.Column) Then
+        If rng.MergeCells And Not (rng.Row = rng.MergeArea.Row _
+        And rng.Column = rng.MergeArea.Column) Then
             ' Slave cell in a merged range
             cellName = ""
             On Error Resume Next
@@ -568,7 +572,8 @@ Private Function GenerateSheetMapMarkdown(ws As Worksheet) As String
                       " | " & mergeMarker & _
                       " | -" & _
                       " | " & IIf(styleParts = "", "-", styleParts) & " |" & vbCrLf
-        ElseIf rng.Value <> "" Or rng.HasFormula Or rng.Interior.ColorIndex <> xlNone Then
+        ElseIf Not IsError(rng.Value) And (rng.Value <> "" _
+        Or rng.HasFormula Or rng.Interior.ColorIndex <> xlNone) Then
             ' Normal cell (or master cell of a merged range)
             cellName = ""
             On Error Resume Next
@@ -844,7 +849,7 @@ Private Function NormalizeStartUpPosition(content As String) As String
     Dim i As Long
     For i = ms.count - 1 To 0 Step -1
         Dim m As Object: Set m = ms(i)
-        Dim v As Integer: v = CInt(m.SubMatches(0))
+        Dim v As Long: v = CLng(m.SubMatches(0))
         Dim canonical As String
         canonical = "StartUpPosition =   " & v & "  '" & labels(v)
         content = Left(content, m.FirstIndex) & canonical & _
@@ -1042,55 +1047,39 @@ Public Function ColNumToLetter(colNum As Long) As String
 End Function
 
 Private Function LongArrayToRangeStr(nums() As Long, count As Long) As String
-    If count = 0 Then Exit Function
-    Dim result As String
-    Dim rangeStart As Long
-    Dim rangeEnd As Long
-    Dim i As Long
-    rangeStart = nums(0)
-    rangeEnd = nums(0)
-    For i = 1 To count - 1
-        If nums(i) = rangeEnd + 1 Then
-            rangeEnd = nums(i)
-        Else
-            If Len(result) > 0 Then result = result & ", "
-            result = result & IIf(rangeStart = rangeEnd, _
-                CStr(rangeStart), CStr(rangeStart) & "-" & CStr(rangeEnd))
-            rangeStart = nums(i)
-            rangeEnd = nums(i)
-        End If
-    Next i
-    If Len(result) > 0 Then result = result & ", "
-    result = result & IIf(rangeStart = rangeEnd, _
-        CStr(rangeStart), CStr(rangeStart) & "-" & CStr(rangeEnd))
-    LongArrayToRangeStr = result
+    LongArrayToRangeStr = NumArrayToRangeStr(nums, count, False)
 End Function
 
 Private Function ColNumArrayToLetterRangeStr(nums() As Long, count As Long) As String
+    ColNumArrayToLetterRangeStr = NumArrayToRangeStr(nums, count, True)
+End Function
+
+Private Function NumArrayToRangeStr(nums() As Long, count As Long, asLetter As Boolean) As String
     If count = 0 Then Exit Function
     Dim result As String
-    Dim rangeStart As Long
-    Dim rangeEnd As Long
+    Dim rangeStart As Long: rangeStart = nums(0)
+    Dim rangeEnd   As Long: rangeEnd   = nums(0)
     Dim i As Long
-    rangeStart = nums(0)
-    rangeEnd = nums(0)
     For i = 1 To count - 1
         If nums(i) = rangeEnd + 1 Then
             rangeEnd = nums(i)
         Else
             If Len(result) > 0 Then result = result & ", "
-            result = result & IIf(rangeStart = rangeEnd, _
-                ColNumToLetter(rangeStart), _
-                ColNumToLetter(rangeStart) & "-" & ColNumToLetter(rangeEnd))
+            result = result & FormatNumRange(rangeStart, rangeEnd, asLetter)
             rangeStart = nums(i)
-            rangeEnd = nums(i)
+            rangeEnd   = nums(i)
         End If
     Next i
     If Len(result) > 0 Then result = result & ", "
-    result = result & IIf(rangeStart = rangeEnd, _
-        ColNumToLetter(rangeStart), _
-        ColNumToLetter(rangeStart) & "-" & ColNumToLetter(rangeEnd))
-    ColNumArrayToLetterRangeStr = result
+    NumArrayToRangeStr = result & FormatNumRange(rangeStart, rangeEnd, asLetter)
+End Function
+
+Private Function FormatNumRange(s As Long, e As Long, asLetter As Boolean) As String
+    If asLetter Then
+        FormatNumRange = IIf(s = e, ColNumToLetter(s), ColNumToLetter(s) & "-" & ColNumToLetter(e))
+    Else
+        FormatNumRange = IIf(s = e, CStr(s), CStr(s) & "-" & CStr(e))
+    End If
 End Function
 
 Private Function CollectHiddenRowRanges(ws As Worksheet) As String
@@ -1256,7 +1245,7 @@ Private Sub ApplyHiddenCols(ws As Worksheet, rangeStr As String)
 End Sub
 
 ' ============================================================
-' Internationalization ? T(), Fmt(), SetLang(), GetLangCode()
+' Internationalization — T(), Fmt(), SetLang(), GetLangCode()
 ' ============================================================
 
 ' Returns localized text for key, falling back through: target lang -> en.ini -> defaultVal -> key.

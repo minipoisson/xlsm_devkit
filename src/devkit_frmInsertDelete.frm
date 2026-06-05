@@ -149,6 +149,9 @@ Private Sub optInsert_Click()
 End Sub
 
 Private Sub txtCount_Change()
+    If m_syncLock Then Exit Sub
+    m_syncLock = True
+
     Dim s As String
     s = txtCount.text
     If s Like String(Len(s), "#") And Len(s) > 0 Then
@@ -158,6 +161,7 @@ Private Sub txtCount_Change()
             spnCount.Value = v
         End If
     End If
+    m_syncLock = False
     UpdateLabels
 End Sub
 

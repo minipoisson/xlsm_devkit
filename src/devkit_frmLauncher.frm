@@ -94,10 +94,7 @@ Private Sub cboLang_Change()
     Dim idx As Long: idx = cboLang.ListIndex
     If idx < 0 Then idx = 0
     If idx = 0 Then
-        SaveSetting "xlsm_devkit", "Language", "Code", ""
-        g_LangCode = ""
-        Set g_LangCache = Nothing
-        Set g_EnCache = Nothing
+        SetLang ""
     Else
         SetLang m_langCodes(idx)
     End If

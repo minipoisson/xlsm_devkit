@@ -4,6 +4,36 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.4.3] - 2026-06-06
+
+### Added
+- `msg.sheet_map_import_error` key added to all 27 language files; displayed when
+  sheet map import fails mid-way.
+
+### Changed
+- `StripAttributeLines`: rewrote from O(n²) string concatenation loop to O(n)
+  array-join to avoid quadratic slowdown on large modules.
+- `LongArrayToRangeStr` / `ColNumArrayToLetterRangeStr` consolidated into
+  `NumArrayToRangeStr` + `FormatNumRange` to eliminate duplicated range-formatting
+  logic.
+- `NormalizeStartUpPosition`: parameter types widened from `Integer` to `Long`.
+
+### Fixed
+- `ImportAllSheetMapsFromMD`: `Application.ScreenUpdating`, `Calculation`, and
+  `EnableEvents` are now restored in an error handler so they are never left
+  disabled if the import fails mid-way.
+- `xlsm_devkit`: added `IsError` guard before reading cell values to prevent
+  runtime errors on cells containing error values (e.g. `#REF!`, `#VALUE!`).
+- `devkit_frmInsertDelete`: added `m_syncLock` to `txtCount_Change` to prevent
+  mutual re-entry with `spnCount_Change` (spinbutton ↔ textbox sync loop).
+- `devkit_frmInstruction`: removed redundant `If MsgBox(...) = vbOK` wrapper in
+  `btnImport_Click`; fixed parenthesized `MsgBox()` call to statement form.
+- `devkit_frmLauncher`: `cboLang_Change` now calls `SetLang ""` uniformly for the
+  auto-detect entry (index 0) instead of branching on `idx = 0`.
+- `devkit_InsertDelete` / `devkit_Move`: renamed local variable `t` to `txt` in
+  `BuildInstructionText` / `BuildMoveInstructionText` to avoid shadowing the
+  global `t()` i18n function.
+
 ## [1.4.2] - 2026-05-28
 
 ### Fixed

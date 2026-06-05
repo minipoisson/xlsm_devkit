@@ -113,7 +113,7 @@ ErrHandler4:
     errMsg4 = Err.Description
     On Error GoTo 0
     MsgBox t("msg.export_warning", _
-             "? The Excel operation succeeded but the sheet export failed. The .old.md file has been retained."), _
+             "The Excel operation succeeded but the sheet export failed. The .old.md file has been retained."), _
            vbExclamation
     Exit Sub
 End Sub
@@ -146,73 +146,73 @@ Private Function BuildInstructionText( _
     Dim sheetName As String: sheetName = ws.Name
     Dim codeName As String: codeName = ws.codeName
     Dim WARN As String: WARN = ChrW(9888) & " "
-    Dim t As String
+    Dim txt As String
 
     If isInsert And isRow Then
-        t = "The following operation was performed on Excel sheet """ & sheetName & """ (VBA CodeName: " & codeName & "):" & vbCrLf & vbCrLf
-        t = t & "  Inserted " & lineCount & " row(s) before row " & rowNum & "." & vbCrLf & vbCrLf
-        t = t & "Please review all .bas files in the src/ folder and update any cell references" & vbCrLf
-        t = t & "in the VBA code that refer to this sheet and have shifted due to this operation." & vbCrLf & vbCrLf
-        t = t & "Sheet map before: @sheet/" & codeName & ".old.md" & vbCrLf
-        t = t & "Sheet map after:  @sheet/" & codeName & ".md" & vbCrLf & vbCrLf
-        t = t & "Reference formats to check:" & vbCrLf
-        t = t & "- String-form:  Range(""B5""), Range(""A1:C10""), etc." & vbCrLf
-        t = t & "- Numeric-form: Rows(N), Cells(R, C), etc." & vbCrLf
-        t = t & "- Dynamic-form: Range(""A"" & n), Cells(startRow + 1, col), etc." & vbCrLf & vbCrLf
-        t = t & "Please list any references that cannot be updated automatically or require confirmation."
+        txt = "The following operation was performed on Excel sheet """ & sheetName & """ (VBA CodeName: " & codeName & "):" & vbCrLf & vbCrLf
+        txt = txt & "  Inserted " & lineCount & " row(s) before row " & rowNum & "." & vbCrLf & vbCrLf
+        txt = txt & "Please review all .bas files in the src/ folder and update any cell references" & vbCrLf
+        txt = txt & "in the VBA code that refer to this sheet and have shifted due to this operation." & vbCrLf & vbCrLf
+        txt = txt & "Sheet map before: @sheet/" & codeName & ".old.md" & vbCrLf
+        txt = txt & "Sheet map after:  @sheet/" & codeName & ".md" & vbCrLf & vbCrLf
+        txt = txt & "Reference formats to check:" & vbCrLf
+        txt = txt & "- String-form:  Range(""B5""), Range(""A1:C10""), etc." & vbCrLf
+        txt = txt & "- Numeric-form: Rows(N), Cells(R, C), etc." & vbCrLf
+        txt = txt & "- Dynamic-form: Range(""A"" & n), Cells(startRow + 1, col), etc." & vbCrLf & vbCrLf
+        txt = txt & "Please list any references that cannot be updated automatically or require confirmation."
 
     ElseIf Not isInsert And isRow Then
         Dim endRow As Long: endRow = rowNum + lineCount - 1
-        t = "The following operation was performed on Excel sheet """ & sheetName & """ (VBA CodeName: " & codeName & "):" & vbCrLf & vbCrLf
-        t = t & "  Deleted " & lineCount & " row(s) starting at row " & rowNum & "  (rows " & rowNum & " through " & endRow & ")." & vbCrLf & vbCrLf
-        t = t & "Please review all .bas files in the src/ folder and update any cell references" & vbCrLf
-        t = t & "in the VBA code that refer to this sheet and have shifted due to this operation." & vbCrLf & vbCrLf
-        t = t & "Sheet map before: @sheet/" & codeName & ".old.md" & vbCrLf
-        t = t & "Sheet map after:  @sheet/" & codeName & ".md" & vbCrLf & vbCrLf
-        t = t & "Reference formats to check:" & vbCrLf
-        t = t & "- String-form:  Range(""B5""), Range(""A1:C10""), etc." & vbCrLf
-        t = t & "- Numeric-form: Rows(N), Cells(R, C), etc." & vbCrLf
-        t = t & "- Dynamic-form: Range(""A"" & n), Cells(startRow + 1, col), etc." & vbCrLf & vbCrLf
-        t = t & WARN & "References that directly targeted the deleted rows (" & rowNum & " through " & endRow & ")" & vbCrLf
-        t = t & "  are now invalid. Please list these as warnings."
+        txt = "The following operation was performed on Excel sheet """ & sheetName & """ (VBA CodeName: " & codeName & "):" & vbCrLf & vbCrLf
+        txt = txt & "  Deleted " & lineCount & " row(s) starting at row " & rowNum & "  (rows " & rowNum & " through " & endRow & ")." & vbCrLf & vbCrLf
+        txt = txt & "Please review all .bas files in the src/ folder and update any cell references" & vbCrLf
+        txt = txt & "in the VBA code that refer to this sheet and have shifted due to this operation." & vbCrLf & vbCrLf
+        txt = txt & "Sheet map before: @sheet/" & codeName & ".old.md" & vbCrLf
+        txt = txt & "Sheet map after:  @sheet/" & codeName & ".md" & vbCrLf & vbCrLf
+        txt = txt & "Reference formats to check:" & vbCrLf
+        txt = txt & "- String-form:  Range(""B5""), Range(""A1:C10""), etc." & vbCrLf
+        txt = txt & "- Numeric-form: Rows(N), Cells(R, C), etc." & vbCrLf
+        txt = txt & "- Dynamic-form: Range(""A"" & n), Cells(startRow + 1, col), etc." & vbCrLf & vbCrLf
+        txt = txt & WARN & "References that directly targeted the deleted rows (" & rowNum & " through " & endRow & ")" & vbCrLf
+        txt = txt & "  are now invalid. Please list these as warnings."
 
     ElseIf isInsert And Not isRow Then
-        t = "The following operation was performed on Excel sheet """ & sheetName & """ (VBA CodeName: " & codeName & "):" & vbCrLf & vbCrLf
-        t = t & "  Inserted " & lineCount & " column(s) before column " & colLetter & " (column number " & colNum & ")." & vbCrLf & vbCrLf
-        t = t & "Please review all .bas files in the src/ folder and update any cell references" & vbCrLf
-        t = t & "in the VBA code that refer to this sheet and have shifted due to this operation." & vbCrLf & vbCrLf
-        t = t & "Sheet map before: @sheet/" & codeName & ".old.md" & vbCrLf
-        t = t & "Sheet map after:  @sheet/" & codeName & ".md" & vbCrLf & vbCrLf
-        t = t & "Reference formats to check:" & vbCrLf
-        t = t & "- String-form:  Range(""C5""), Range(""A1:C10""), etc." & vbCrLf
-        t = t & "- Numeric-form: Columns(N), Cells(R, C), etc." & vbCrLf
-        t = t & "- Dynamic-form: Range(colLetter & n), Cells(r, colNum + 1), etc." & vbCrLf & vbCrLf
-        t = t & "Please list any references that cannot be updated automatically or require confirmation."
+        txt = "The following operation was performed on Excel sheet """ & sheetName & """ (VBA CodeName: " & codeName & "):" & vbCrLf & vbCrLf
+        txt = txt & "  Inserted " & lineCount & " column(s) before column " & colLetter & " (column number " & colNum & ")." & vbCrLf & vbCrLf
+        txt = txt & "Please review all .bas files in the src/ folder and update any cell references" & vbCrLf
+        txt = txt & "in the VBA code that refer to this sheet and have shifted due to this operation." & vbCrLf & vbCrLf
+        txt = txt & "Sheet map before: @sheet/" & codeName & ".old.md" & vbCrLf
+        txt = txt & "Sheet map after:  @sheet/" & codeName & ".md" & vbCrLf & vbCrLf
+        txt = txt & "Reference formats to check:" & vbCrLf
+        txt = txt & "- String-form:  Range(""C5""), Range(""A1:C10""), etc." & vbCrLf
+        txt = txt & "- Numeric-form: Columns(N), Cells(R, C), etc." & vbCrLf
+        txt = txt & "- Dynamic-form: Range(colLetter & n), Cells(r, colNum + 1), etc." & vbCrLf & vbCrLf
+        txt = txt & "Please list any references that cannot be updated automatically or require confirmation."
 
     Else
         Dim endColNum As Long: endColNum = colNum + lineCount - 1
         Dim endColLetter As String: endColLetter = ColNumToLetter(endColNum)
-        t = "The following operation was performed on Excel sheet """ & sheetName & """ (VBA CodeName: " & codeName & "):" & vbCrLf & vbCrLf
-        t = t & "  Deleted " & lineCount & " column(s) starting at column " & colLetter & " (column number " & colNum & ")" & vbCrLf
-        t = t & "  through column " & endColLetter & " (column number " & endColNum & ")." & vbCrLf & vbCrLf
-        t = t & "Please review all .bas files in the src/ folder and update any cell references" & vbCrLf
-        t = t & "in the VBA code that refer to this sheet and have shifted due to this operation." & vbCrLf & vbCrLf
-        t = t & "Sheet map before: @sheet/" & codeName & ".old.md" & vbCrLf
-        t = t & "Sheet map after:  @sheet/" & codeName & ".md" & vbCrLf & vbCrLf
-        t = t & "Reference formats to check:" & vbCrLf
-        t = t & "- String-form:  Range(""C5""), Range(""A1:C10""), etc." & vbCrLf
-        t = t & "- Numeric-form: Columns(N), Cells(R, C), etc." & vbCrLf
-        t = t & "- Dynamic-form: Range(colLetter & n), Cells(r, colNum + 1), etc." & vbCrLf & vbCrLf
-        t = t & WARN & "References that directly targeted the deleted columns" & vbCrLf
-        t = t & "  (" & colLetter & "(col " & colNum & ") through " & endColLetter & "(col " & endColNum & ")) are now invalid." & vbCrLf
-        t = t & "  Please list these as warnings."
+        txt = "The following operation was performed on Excel sheet """ & sheetName & """ (VBA CodeName: " & codeName & "):" & vbCrLf & vbCrLf
+        txt = txt & "  Deleted " & lineCount & " column(s) starting at column " & colLetter & " (column number " & colNum & ")" & vbCrLf
+        txt = txt & "  through column " & endColLetter & " (column number " & endColNum & ")." & vbCrLf & vbCrLf
+        txt = txt & "Please review all .bas files in the src/ folder and update any cell references" & vbCrLf
+        txt = txt & "in the VBA code that refer to this sheet and have shifted due to this operation." & vbCrLf & vbCrLf
+        txt = txt & "Sheet map before: @sheet/" & codeName & ".old.md" & vbCrLf
+        txt = txt & "Sheet map after:  @sheet/" & codeName & ".md" & vbCrLf & vbCrLf
+        txt = txt & "Reference formats to check:" & vbCrLf
+        txt = txt & "- String-form:  Range(""C5""), Range(""A1:C10""), etc." & vbCrLf
+        txt = txt & "- Numeric-form: Columns(N), Cells(R, C), etc." & vbCrLf
+        txt = txt & "- Dynamic-form: Range(colLetter & n), Cells(r, colNum + 1), etc." & vbCrLf & vbCrLf
+        txt = txt & WARN & "References that directly targeted the deleted columns" & vbCrLf
+        txt = txt & "  (" & colLetter & "(col " & colNum & ") through " & endColLetter & "(col " & endColNum & ")) are now invalid." & vbCrLf
+        txt = txt & "  Please list these as warnings."
     End If
 
     Dim langName As String: langName = GetLangMeta("english_name")
     If Len(langName) = 0 Then langName = GetLangMeta("native_name")
     If Len(langName) > 0 And langName <> "English" Then
-        t = t & vbCrLf & vbCrLf & "Please respond in " & langName & "."
+        txt = txt & vbCrLf & vbCrLf & "Please respond in " & langName & "."
     End If
-    
-    BuildInstructionText = t
+
+    BuildInstructionText = txt
 End Function

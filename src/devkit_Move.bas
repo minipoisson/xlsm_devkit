@@ -568,23 +568,23 @@ Private Function BuildMoveInstructionText( _
     reducedAccuracy As Boolean, _
     unexpectedLines As String _
 ) As String
-    Dim t As String
+    Dim txt As String
     Dim WARN As String: WARN = ChrW(9888) & " "
 
     If isSameSheet Then
-        t = "The following cell range move was performed on Excel sheet """ & wsSource.Name & """" & _
+        txt = "The following cell range move was performed on Excel sheet """ & wsSource.Name & """" & _
             " (VBA CodeName: " & wsSource.codeName & "):" & vbCrLf & vbCrLf
-        t = t & "  Cut " & srcRange & ", pasted to " & dstRange & " on the same sheet." & vbCrLf & vbCrLf
-        t = t & "Please review all .bas files in the src/ folder and update any VBA references" & vbCrLf
-        t = t & "that target the source range " & srcRange & " on this sheet to point to " & dstRange & "." & vbCrLf & vbCrLf
-        t = t & "Sheet map before: @sheet/" & wsSource.codeName & ".old.md" & vbCrLf
-        t = t & "Sheet map after:  @sheet/" & wsSource.codeName & ".md" & vbCrLf & vbCrLf
-        t = t & "Reference formats to check:" & vbCrLf
-        t = t & "- String-form:  Range(""" & srcRange & """), Range(""" & FirstCell(srcRange) & """), etc." & vbCrLf
-        t = t & "- Numeric-form: Cells(R, C) where R and C correspond to cells within " & srcRange & vbCrLf
-        t = t & "- Dynamic-form: references constructed from the source range coordinates" & vbCrLf & vbCrLf
-        t = t & "Note: Formulas inside the moved range that reference cells outside it" & vbCrLf
-        t = t & "      are updated automatically by Excel. Focus on VBA code references only."
+        txt = txt & "  Cut " & srcRange & ", pasted to " & dstRange & " on the same sheet." & vbCrLf & vbCrLf
+        txt = txt & "Please review all .bas files in the src/ folder and update any VBA references" & vbCrLf
+        txt = txt & "that target the source range " & srcRange & " on this sheet to point to " & dstRange & "." & vbCrLf & vbCrLf
+        txt = txt & "Sheet map before: @sheet/" & wsSource.codeName & ".old.md" & vbCrLf
+        txt = txt & "Sheet map after:  @sheet/" & wsSource.codeName & ".md" & vbCrLf & vbCrLf
+        txt = txt & "Reference formats to check:" & vbCrLf
+        txt = txt & "- String-form:  Range(""" & srcRange & """), Range(""" & FirstCell(srcRange) & """), etc." & vbCrLf
+        txt = txt & "- Numeric-form: Cells(R, C) where R and C correspond to cells within " & srcRange & vbCrLf
+        txt = txt & "- Dynamic-form: references constructed from the source range coordinates" & vbCrLf & vbCrLf
+        txt = txt & "Note: Formulas inside the moved range that reference cells outside it" & vbCrLf
+        txt = txt & "      are updated automatically by Excel. Focus on VBA code references only."
     Else
         ' Determine actual dest worksheet for CodeName
         Dim dstCodeName As String
@@ -600,47 +600,47 @@ Private Function BuildMoveInstructionText( _
             Next ws
         End If
 
-        t = "The following cell range move was performed across sheets:" & vbCrLf & vbCrLf
-        t = t & "  Source:      " & srcSheetName & " (CodeName: " & wsSource.codeName & ")" & _
+        txt = "The following cell range move was performed across sheets:" & vbCrLf & vbCrLf
+        txt = txt & "  Source:      " & srcSheetName & " (CodeName: " & wsSource.codeName & ")" & _
                 "  range " & srcRange & vbCrLf
-        t = t & "  Destination: " & dstSheetName & " (CodeName: " & dstCodeName & ")" & _
+        txt = txt & "  Destination: " & dstSheetName & " (CodeName: " & dstCodeName & ")" & _
                 "  range " & dstRange & vbCrLf & vbCrLf
-        t = t & "Please review all .bas files in the src/ folder and update any VBA references" & vbCrLf
-        t = t & "that target " & srcSheetName & "!" & srcRange & _
+        txt = txt & "Please review all .bas files in the src/ folder and update any VBA references" & vbCrLf
+        txt = txt & "that target " & srcSheetName & "!" & srcRange & _
                 " to point to " & dstSheetName & "!" & dstRange & "." & vbCrLf & vbCrLf
-        t = t & "Sheet map before (source): @sheet/" & wsSource.codeName & ".old.md" & vbCrLf
-        t = t & "Sheet map after  (source): @sheet/" & wsSource.codeName & ".md" & vbCrLf
-        t = t & "Sheet map before (dest):   @sheet/" & dstCodeName & ".old.md" & vbCrLf
-        t = t & "Sheet map after  (dest):   @sheet/" & dstCodeName & ".md" & vbCrLf & vbCrLf
-        t = t & "Reference formats to check:" & vbCrLf
-        t = t & "- String-form:  Sheets(""" & srcSheetName & """).Range(""" & srcRange & """), Range(""" & srcRange & """), etc." & vbCrLf
-        t = t & "- Numeric-form: Cells(R, C) where R and C correspond to cells within " & srcRange & vbCrLf
-        t = t & "- Dynamic-form: references constructed from the source range coordinates" & vbCrLf & vbCrLf
-        t = t & "Note: Formulas inside the moved range that reference cells outside it" & vbCrLf
-        t = t & "      are updated automatically by Excel. Focus on VBA code references only."
+        txt = txt & "Sheet map before (source): @sheet/" & wsSource.codeName & ".old.md" & vbCrLf
+        txt = txt & "Sheet map after  (source): @sheet/" & wsSource.codeName & ".md" & vbCrLf
+        txt = txt & "Sheet map before (dest):   @sheet/" & dstCodeName & ".old.md" & vbCrLf
+        txt = txt & "Sheet map after  (dest):   @sheet/" & dstCodeName & ".md" & vbCrLf & vbCrLf
+        txt = txt & "Reference formats to check:" & vbCrLf
+        txt = txt & "- String-form:  Sheets(""" & srcSheetName & """).Range(""" & srcRange & """), Range(""" & srcRange & """), etc." & vbCrLf
+        txt = txt & "- Numeric-form: Cells(R, C) where R and C correspond to cells within " & srcRange & vbCrLf
+        txt = txt & "- Dynamic-form: references constructed from the source range coordinates" & vbCrLf & vbCrLf
+        txt = txt & "Note: Formulas inside the moved range that reference cells outside it" & vbCrLf
+        txt = txt & "      are updated automatically by Excel. Focus on VBA code references only."
     End If
 
     If Len(unexpectedLines) > 0 Then
-        t = t & vbCrLf & vbCrLf
-        t = t & WARN & "The recorded macro contained the following unexpected operations." & vbCrLf
-        t = t & "  Please review whether these affect any VBA references:" & vbCrLf & vbCrLf
-        t = t & unexpectedLines
+        txt = txt & vbCrLf & vbCrLf
+        txt = txt & WARN & "The recorded macro contained the following unexpected operations." & vbCrLf
+        txt = txt & "  Please review whether these affect any VBA references:" & vbCrLf & vbCrLf
+        txt = txt & unexpectedLines
     End If
     
     Dim langName As String: langName = GetLangMeta("english_name")
     If Len(langName) = 0 Then langName = GetLangMeta("native_name")
     If Len(langName) > 0 And langName <> "English" Then
-        t = t & vbCrLf & vbCrLf & "Please respond in " & langName & "."
+        txt = txt & vbCrLf & vbCrLf & "Please respond in " & langName & "."
     End If
 
     If reducedAccuracy Then
-        t = t & vbCrLf & vbCrLf
-        t = t & WARN & "The sheet map for the destination sheet before the move was not captured." & vbCrLf
-        t = t & "  The ""Sheet map before (dest)"" above reflects the post-move state." & vbCrLf
-        t = t & "  Accuracy of reference detection for the destination sheet may be reduced."
+        txt = txt & vbCrLf & vbCrLf
+        txt = txt & WARN & "The sheet map for the destination sheet before the move was not captured." & vbCrLf
+        txt = txt & "  The ""Sheet map before (dest)"" above reflects the post-move state." & vbCrLf
+        txt = txt & "  Accuracy of reference detection for the destination sheet may be reduced."
     End If
 
-    BuildMoveInstructionText = t
+    BuildMoveInstructionText = txt
 End Function
 
 Private Function FirstCell(ByVal addr As String) As String

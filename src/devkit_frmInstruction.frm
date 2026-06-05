@@ -48,9 +48,8 @@ Private Sub btnImport_Click()
 
     On Error GoTo ErrHandler
     ImportAllComponents True
-    If MsgBox(t("frmInstruction.import_done", "Code has been imported."), vbOKOnly + vbInformation) = vbOK Then
-        Unload Me
-    End If
+    MsgBox t("frmInstruction.import_done", "Code has been imported."), vbOKOnly + vbInformation
+    Unload Me
     Exit Sub
 
 ErrHandler:
