@@ -463,17 +463,28 @@ Sub ImportAllSheetMapsFromMD(Optional skipConfirm As Boolean = False)
         If MsgBox(t("msg.import_sheets_confirm", "Import all sheet maps from sheet/?"), vbYesNo + vbDefaultButton2) = vbNo Then Exit Sub
     End If
 
+    Dim preScreenUpdate As Boolean
+    preScreenUpdate = Application.ScreenUpdating
+    Application.ScreenUpdating = False
+    Dim preCalcMode As XlCalculation
+    preCalcMode = Application.Calculation
+    Application.Calculation = xlCalculationManual
+    Dim preEvents As Boolean
+    preEvents = Application.EnableEvents
+    Application.EnableEvents = False
+
     Dim ws As Worksheet
     Dim sheetFolderPath As String
     Dim fileName As String
     Dim mdContent As String
 
+    On Error GoTo lblErr
     sheetFolderPath = ThisWorkbook.Path & "\sheet"
     Dim fso As Object
     Set fso = CreateObject("Scripting.FileSystemObject")
     If Not fso.FolderExists(sheetFolderPath) Then
         MsgBox Fmt(t("msg.sheet_not_found", "Sheet folder not found: {0}"), sheetFolderPath), vbExclamation
-        Exit Sub
+        GoTo lblFin
     End If
 
     For Each ws In ThisWorkbook.Worksheets
@@ -485,6 +496,15 @@ Sub ImportAllSheetMapsFromMD(Optional skipConfirm As Boolean = False)
     Next ws
 
     MsgBox t("msg.sheet_maps_imported", "All sheet maps imported."), vbInformation
+    GoTo lblFin
+lblErr:
+    MsgBox t("msg.sheet_map_import_error", _
+    "Error importing sheet maps. Some sheets may be partially updated.") _
+    & vbCrLf & Err.Description, vbExclamation
+lblFin:
+    Application.EnableEvents = preEvents
+    Application.Calculation = preCalcMode
+    Application.ScreenUpdating = preScreenUpdate
 End Sub
 
 Private Function GenerateSheetMapMarkdown(ws As Worksheet) As String
@@ -768,7 +788,9 @@ Private Sub ApplySheetMapMarkdown(ws As Worksheet, mdContent As String)
                             rng.Formula = fml
                             On Error GoTo 0
                         ElseIf cValue <> "-" And cValue <> "" Then
+                            On Error Resume Next
                             rng.Value = UnescapeCellValue(cValue)
+                            On Error GoTo 0
                         End If
                         ApplyCellStyle rng, cStyle
                         If cName <> "-" Then ApplyCellName ws, rng, cName
