@@ -380,7 +380,8 @@ Private Function ParseCutOperation( _
         ln = Trim(lines(i))
         If Len(ln) = 0 Then GoTo NextLine
         ' Skip Sub/End Sub/comments
-        If ln Like "Sub *" Or ln Like "End Sub" Or Left(ln, 1) = "'" Then GoTo NextLine
+        If LCase(ln) Like "sub *" Or LCase(ln) Like "* sub *" _
+        Or LCase(ln) Like "end sub" Or Left(ln, 1) = "'" Then GoTo NextLine
 
         ' Application.CutCopyMode / Selection.Copy ? expected, skip
         If InStr(1, ln, "Application.CutCopyMode", vbTextCompare) > 0 Then GoTo NextLine
@@ -389,13 +390,15 @@ Private Function ParseCutOperation( _
         ' Sheets("...").Select or .Activate ? track active sheet
         Dim sheetSel As String
         sheetSel = ExtractSheetName(ln)
-        If sheetSel <> "" And (InStr(1, ln, ".Select", vbTextCompare) > 0 Or InStr(1, ln, ".Activate", vbTextCompare) > 0) Then
+        If sheetSel <> "" And (InStr(1, ln, ".Select", vbTextCompare) > 0 _
+        Or InStr(1, ln, ".Activate", vbTextCompare) > 0) Then
             activeSheet = sheetSel
             GoTo NextLine
         End If
 
         ' Pattern A: Range("...").Cut Destination:=Range("...")
-        If InStr(1, ln, ".Cut", vbTextCompare) > 0 And InStr(1, ln, "Destination", vbTextCompare) > 0 Then
+        If InStr(1, ln, ".Cut", vbTextCompare) > 0 _
+        And InStr(1, ln, "Destination", vbTextCompare) > 0 Then
             Dim aSrcSheet As String, aSrcRange As String, aDstSheet As String, aDstRange As String
             If ParsePatternA(ln, activeSheet, aSrcSheet, aSrcRange, aDstSheet, aDstRange) Then
                 srcSheetName = aSrcSheet
@@ -408,7 +411,8 @@ Private Function ParseCutOperation( _
         End If
 
         ' Pattern B step 1: Range("...").Select ? potential source selection
-        If InStr(1, ln, ".Select", vbTextCompare) > 0 And InStr(1, ln, "Range(", vbTextCompare) > 0 And Not afterCut Then
+        If InStr(1, ln, ".Select", vbTextCompare) > 0 _
+        And InStr(1, ln, "Range(", vbTextCompare) > 0 And Not afterCut Then
             Dim bSrcSheet As String, bSrcRange As String
             If ExtractRangeFromSelect(ln, activeSheet, bSrcSheet, bSrcRange) Then
                 pendingSrcSheet = bSrcSheet
@@ -424,7 +428,8 @@ Private Function ParseCutOperation( _
         End If
 
         ' Pattern B step 3 (after cut): Range("...").Select ? destination
-        If afterCut And InStr(1, ln, ".Select", vbTextCompare) > 0 And InStr(1, ln, "Range(", vbTextCompare) > 0 Then
+        If afterCut And InStr(1, ln, ".Select", vbTextCompare) > 0 _
+        And InStr(1, ln, "Range(", vbTextCompare) > 0 Then
             Dim bDstSheet As String, bDstRange As String
             If ExtractRangeFromSelect(ln, activeSheet, bDstSheet, bDstRange) Then
                 pendingDstSheet = bDstSheet
@@ -450,7 +455,8 @@ Private Function ParseCutOperation( _
         If InStr(1, ln, ".PasteSpecial", vbTextCompare) > 0 Then GoTo NextLine
 
         ' Any remaining .Select or .Activate without Sheets prefix ? expected navigation
-        If (InStr(1, ln, ".Select", vbTextCompare) > 0 Or InStr(1, ln, ".Activate", vbTextCompare) > 0) Then
+        If (InStr(1, ln, ".Select", vbTextCompare) > 0 _
+        Or InStr(1, ln, ".Activate", vbTextCompare) > 0) Then
             GoTo NextLine
         End If
 

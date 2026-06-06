@@ -93,8 +93,8 @@ Sub ExportAllComponents(Optional skipConfirm As Boolean = False)
 
     Dim comp As Object, expPath As String, frxPath As String
     For Each comp In ThisWorkbook.VBProject.VBComponents
-        If SKIP_DEVKIT_MODULES And (Left(comp.Name, 7) = "devkit_" _
-        Or Left(comp.Name, 11) = "xlsm_devkit") Then GoTo lblNext
+        If SKIP_DEVKIT_MODULES And (LCase(Left(comp.Name, 7)) = "devkit_" _
+        Or LCase(Left(comp.Name, 11)) = "xlsm_devkit") Then GoTo lblNext
         
         If comp.Type = 3 Then
             expPath = dirPath & "\" & comp.Name & ".frm"
@@ -137,9 +137,9 @@ Sub ImportAllComponents(Optional skipConfirm As Boolean = False)
         ext = LCase(fso.GetExtensionName(srcFile.Name))
         compName = Left(srcFile.Name, Len(srcFile.Name) - Len(ext) - 1)
         If ext = "bas" Then
-            If compName = MODULE_NAME Then GoTo lblNext              ' xlsm_devkit (self)
-            If SKIP_DEVKIT_MODULES And Left(compName, 7) = "devkit_" Then GoTo lblNext  ' optional devkit modules
-            If compName = "devkit_Move" And isMoveLocked Then         ' devkit_Move on call stack
+            If LCase(compName) = LCase(MODULE_NAME) Then GoTo lblNext              ' xlsm_devkit (self)
+            If SKIP_DEVKIT_MODULES And LCase(Left(compName, 7)) = "devkit_" Then GoTo lblNext  ' optional devkit modules
+            If LCase(compName) = "devkit_move" And isMoveLocked Then         ' devkit_Move on call stack
                 skipCount = skipCount + 1: GoTo lblNext
             End If
             If ComponentExists(compName) Then
@@ -148,7 +148,7 @@ Sub ImportAllComponents(Optional skipConfirm As Boolean = False)
                 If ImportNewComponentFromFile(srcFile.Path) Then successCount = successCount + 1 Else failCount = failCount + 1
             End If
         ElseIf ext = "frm" Then
-            If SKIP_DEVKIT_MODULES And Left(compName, 7) = "devkit_" Then GoTo lblNext  ' optional devkit forms
+            If SKIP_DEVKIT_MODULES And LCase(Left(compName, 7)) = "devkit_" Then GoTo lblNext  ' optional devkit forms
             If IsFormCurrentlyLoaded(compName) Then                  ' skip any loaded form
                 skipCount = skipCount + 1: GoTo lblNext
             End If
@@ -272,7 +272,7 @@ End Function
 Private Function IsFormCurrentlyLoaded(formName As String) As Boolean
     Dim frm As Object
     For Each frm In VBA.UserForms
-        If frm.Name = formName Then IsFormCurrentlyLoaded = True: Exit Function
+        If LCase(frm.Name) = LCase(formName) Then IsFormCurrentlyLoaded = True: Exit Function
     Next frm
 End Function
 
