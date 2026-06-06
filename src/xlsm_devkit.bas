@@ -1446,8 +1446,11 @@ Public Sub InitDevMode()
         For Each f In srcFolder.Files
             fExt  = LCase(fso.GetExtensionName(f.Path))
             fBase = fso.GetBaseName(f.Path)
-            If Left(fBase, 7) = "devkit_" And (fExt = "bas" Or fExt = "frm") Then
-                ImportComponentIntoProject devWb.VBProject, f.Path
+            If LCase(Left(fBase, 7)) = "devkit_" And (fExt = "bas" Or fExt = "frm") Then
+                If Not ImportComponentIntoProject(devWb.VBProject, f.Path) Then
+                    MsgBox "Failed to import component: " & f.Name, vbExclamation
+                End If
+
             End If
         Next f
     End If
@@ -1579,5 +1582,7 @@ End Function
 
 
 Private Function IsDevkitComponent(compName As String) As Boolean
-    IsDevkitComponent = (compName = MODULE_NAME) Or (Left(compName, 7) = "devkit_")
+    Dim lowerName As String
+    lowerName = LCase(compName)
+    IsDevkitComponent = (lowerName = LCase(MODULE_NAME)) Or (Left(lowerName, 7) = "devkit_")
 End Function
