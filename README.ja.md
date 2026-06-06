@@ -88,6 +88,26 @@ SetLang ""     ' システム設定に戻す
 4. `ExportAllModulesFormsSheetMaps` を実行し、ブックと同じフォルダに `src/` と `sheet/` が作成されることを確認する。
 5. VS Code などで `src/` 内のファイルを編集し、`ImportAllModulesFormsSheetMaps` を実行する。
 
+### DEV / リリース ワークフロー
+
+ユーザー向けの `.xlsm` を devkit モジュールのない状態で配布したい場合は、`DEV_` 命名規則を使います。
+
+**開発開始 (`InitDevMode`)**
+
+1. 本番ブック（例: `MyTool.xlsm`）を開き、上記の導入手順と同様に `xlsm_devkit.bas` を手動でインポートする。
+2. xlsm_devkit リリースから必要な `devkit_*.bas`, `devkit_*.frm`, `devkit_*.frx` をブックと同じフォルダの `src/` に配置する。
+3. `InitDevMode` を実行する。`DEV_MyTool.xlsm` が同フォルダに作成され、`src/` にある `devkit_*` ファイルがすべてインポートされる。
+4. `MyTool.xlsm` を**保存せずに**閉じる。こうすることで本番ファイルには devkit モジュールが残らない。
+5. `DEV_MyTool.xlsm` を開いて開発を進める。
+
+**リリース (`SaveAsRelease`)**
+
+配布する準備ができたら:
+
+1. `DEV_MyTool.xlsm` から `SaveAsRelease` を実行する。
+2. `DEV_` プレフィックスを除いた名前 `MyTool.xlsm` としてコピーが保存され、`xlsm_devkit` と `devkit_*` モジュールがそのコピーから削除される。
+3. `DEV_MyTool.xlsm` はそのまま — 引き続き開発に使用できる。
+
 ### エクスポート
 
 `ExportAllModulesFormsSheetMaps` を実行すると、全モジュール・フォームとシートマップをまとめてエクスポートします。

@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- `InitDevMode`: creates a `DEV_<name>.xlsm` copy of the current workbook and
+  imports all `devkit_*` modules/forms found in `src/` into it, enabling a clean
+  dev/release separation workflow.
+- `SaveAsRelease`: strips all `xlsm_devkit` and `devkit_*` VBA components and saves
+  a clean production copy (removes `DEV_` prefix from filename). Call from the DEV_
+  workbook.
+- `ImportComponentIntoProject`: private helper that imports a UTF-8 source file into
+  any target VBProject (used by `InitDevMode` for cross-workbook injection).
+- `IsDevkitComponent`: private helper that identifies devkit module names (used by
+  `SaveAsRelease` for stripping).
+- DEV/release workflow documented in README (English and Japanese).
+- 11 new i18n keys (`init_*`, `release_*`) added to all 27 language files.
+
 ## [1.4.3] - 2026-06-06
 
 ### Added

@@ -22,6 +22,8 @@ Private Declare Function GetLocaleInfoA Lib "kernel32" ( _
 '   CallExportAllSheetMapsToMD - export all sheet maps to sheet/ as Markdown files
 '   CallImportAllSheetMapsFromMD - import all sheet maps from sheet/ Markdown files
 '   ExportSheetToMDFile(ws as Worksheet, filePath as String) - export a single sheet map to a specified Markdown file
+'   InitDevMode      - create DEV_ copy of this workbook and inject devkit_* modules from src/
+'   SaveAsRelease    - strip devkit modules and save production copy (call from DEV_ workbook)
 
 Private Const MODULE_NAME As String = "xlsm_devkit"
 ' Set True to skip optional devkit feature modules on import (recommended for users).
@@ -1393,4 +1395,189 @@ Private Function GetSystemAnsiCharset() As String
         Case 874:  GetSystemAnsiCharset = "Windows-874"
         Case Else: GetSystemAnsiCharset = "Windows-" & cp
     End Select
+End Function
+
+
+' ── Dev/Release lifecycle ────────────────────────────────────────────────────
+
+Public Sub InitDevMode()
+    If UCase(Left(ThisWorkbook.Name, 4)) = "DEV_" Then
+        MsgBox t("msg.init_already_dev", "This workbook already has the DEV_ prefix. Call InitDevMode() from a production workbook."), vbExclamation
+        Exit Sub
+    End If
+    If Len(ThisWorkbook.Path) = 0 Then
+        MsgBox t("msg.init_unsaved", "Please save this workbook before calling InitDevMode()."), vbExclamation
+        Exit Sub
+    End If
+    If Not CheckVBProjectAccess() Then Exit Sub
+
+    Dim fso As Object
+    Set fso = CreateObject("Scripting.FileSystemObject")
+
+    Dim devPath As String
+    devPath = ThisWorkbook.Path & "\DEV_" & ThisWorkbook.Name
+
+    If fso.FileExists(devPath) Then
+        If MsgBox(Fmt(t("msg.init_overwrite_confirm", "'{0}' already exists. Overwrite?"), devPath), _
+                  vbYesNo + vbDefaultButton2) = vbNo Then Exit Sub
+    Else
+        If MsgBox(Fmt(t("msg.init_confirm", "Create DEV_ copy as '{0}'?" & vbLf & _
+                        "All devkit_* files found in src/ will be imported."), devPath), _
+                  vbYesNo + vbDefaultButton2) = vbNo Then Exit Sub
+    End If
+
+    Dim devWb As Workbook
+    Dim prevSecurity As Long
+    prevSecurity = Application.AutomationSecurity
+
+    On Error GoTo ErrHandler
+    ThisWorkbook.SaveCopyAs devPath
+
+    Application.AutomationSecurity = 3  ' msoAutomationSecurityForceDisable
+    Set devWb = Workbooks.Open(devPath, UpdateLinks:=0)
+    Application.AutomationSecurity = prevSecurity
+
+    Dim srcDir As String
+    srcDir = ThisWorkbook.Path & "\src"
+    If fso.FolderExists(srcDir) Then
+        Dim srcFolder As Object
+        Set srcFolder = fso.GetFolder(srcDir)
+        Dim f As Object, fExt As String, fBase As String
+        For Each f In srcFolder.Files
+            fExt  = LCase(fso.GetExtensionName(f.Path))
+            fBase = fso.GetBaseName(f.Path)
+            If Left(fBase, 7) = "devkit_" And (fExt = "bas" Or fExt = "frm") Then
+                ImportComponentIntoProject devWb.VBProject, f.Path
+            End If
+        Next f
+    End If
+
+    devWb.Save
+    devWb.Close SaveChanges:=False
+
+    MsgBox Fmt(t("msg.init_complete", "DEV_ copy created: {0}" & vbLf & vbLf & _
+                 "Close this workbook WITHOUT saving (Ctrl+W -> Don't Save) to keep the production file clean."), _
+               devPath), vbInformation
+    Exit Sub
+
+ErrHandler:
+    Application.AutomationSecurity = prevSecurity
+    Dim initErrDesc As String: initErrDesc = Err.Description
+    On Error Resume Next
+    If Not devWb Is Nothing Then devWb.Close SaveChanges:=False
+    MsgBox Fmt(t("msg.init_failed", "Failed to create DEV_ copy: {0}"), initErrDesc), vbCritical
+End Sub
+
+
+Public Sub SaveAsRelease()
+    If UCase(Left(ThisWorkbook.Name, 4)) <> "DEV_" Then
+        MsgBox t("msg.release_no_dev_prefix", "This workbook does not have the DEV_ prefix. SaveAsRelease() must be called from a DEV_ workbook."), vbExclamation
+        Exit Sub
+    End If
+    If Not CheckVBProjectAccess() Then Exit Sub
+
+    Dim fso As Object
+    Set fso = CreateObject("Scripting.FileSystemObject")
+
+    Dim releasePath As String
+    releasePath = ThisWorkbook.Path & "\" & Mid(ThisWorkbook.Name, 5)
+
+    If fso.FileExists(releasePath) Then
+        If MsgBox(Fmt(t("msg.release_overwrite_confirm", "'{0}' already exists. Overwrite?"), releasePath), _
+                  vbYesNo + vbDefaultButton2) = vbNo Then Exit Sub
+    Else
+        If MsgBox(Fmt(t("msg.release_confirm", "Save release copy as '{0}'?" & vbLf & _
+                        "All devkit modules will be removed from the copy."), releasePath), _
+                  vbYesNo + vbDefaultButton2) = vbNo Then Exit Sub
+    End If
+
+    Dim relWb As Workbook
+    Dim prevSecurity As Long
+    prevSecurity = Application.AutomationSecurity
+
+    On Error GoTo ErrHandler
+    ThisWorkbook.SaveCopyAs releasePath
+
+    Application.AutomationSecurity = 3  ' msoAutomationSecurityForceDisable
+    Set relWb = Workbooks.Open(releasePath, UpdateLinks:=0)
+    Application.AutomationSecurity = prevSecurity
+
+    ' Collect devkit component names first (avoid modifying collection while iterating)
+    Dim comp As Object
+    Dim toRemove() As String
+    ReDim toRemove(relWb.VBProject.VBComponents.Count)
+    Dim removeCount As Long
+    removeCount = 0
+    For Each comp In relWb.VBProject.VBComponents
+        If IsDevkitComponent(comp.Name) And comp.Type <> 100 Then
+            toRemove(removeCount) = comp.Name
+            removeCount = removeCount + 1
+        End If
+    Next comp
+
+    Dim i As Long
+    For i = 0 To removeCount - 1
+        On Error Resume Next
+        relWb.VBProject.VBComponents.Remove relWb.VBProject.VBComponents(toRemove(i))
+        On Error GoTo ErrHandler
+    Next i
+
+    relWb.Save
+    relWb.Close SaveChanges:=False
+
+    MsgBox Fmt(t("msg.release_complete", "Release copy saved: {0}"), releasePath), vbInformation
+    Exit Sub
+
+ErrHandler:
+    Application.AutomationSecurity = prevSecurity
+    Dim relErrDesc As String: relErrDesc = Err.Description
+    On Error Resume Next
+    If Not relWb Is Nothing Then relWb.Close SaveChanges:=False
+    MsgBox Fmt(t("msg.release_failed", "Failed to create release copy: {0}"), relErrDesc), vbCritical
+End Sub
+
+
+Private Function ImportComponentIntoProject(vbProj As Object, utf8FilePath As String) As Boolean
+    Dim backupPath As String
+    backupPath = utf8FilePath & "_"
+
+    Dim fso As Object
+    Set fso = CreateObject("Scripting.FileSystemObject")
+
+    On Error GoTo ErrHandler
+
+    Dim baseName As String
+    baseName = fso.GetBaseName(utf8FilePath)
+
+    fso.CopyFile utf8FilePath, backupPath
+    ConvertEncoding utf8FilePath, "UTF-8", GetSystemAnsiCharset()
+
+    On Error Resume Next
+    Dim existComp As Object
+    Set existComp = vbProj.VBComponents(baseName)
+    If Not existComp Is Nothing Then
+        If existComp.Type <> 100 Then vbProj.VBComponents.Remove existComp
+    End If
+    Set existComp = Nothing
+    On Error GoTo ErrHandler
+
+    vbProj.VBComponents.Import utf8FilePath
+
+    fso.DeleteFile utf8FilePath, True
+    fso.MoveFile backupPath, utf8FilePath
+    ImportComponentIntoProject = True
+    Exit Function
+
+ErrHandler:
+    On Error Resume Next
+    If fso.FileExists(backupPath) Then
+        If fso.FileExists(utf8FilePath) Then fso.DeleteFile utf8FilePath, True
+        fso.MoveFile backupPath, utf8FilePath
+    End If
+    ImportComponentIntoProject = False
+End Function
+
+
+Private Function IsDevkitComponent(compName As String) As Boolean
+    IsDevkitComponent = (compName = MODULE_NAME) Or (Left(compName, 7) = "devkit_")
 End Function

@@ -90,6 +90,26 @@ SetLang ""     ' revert to system auto-detection
 4. Run `ExportAllModulesFormsSheetMaps` once and confirm that `src/` and `sheet/` are created next to the workbook.
 5. Edit files in `src/` with VS Code, then run `ImportAllModulesFormsSheetMaps`.
 
+### DEV / release workflow
+
+When you want to keep the user-facing workbook free from devkit modules, use the `DEV_` naming convention:
+
+**Start development (`InitDevMode`)**
+
+1. Open the production workbook (e.g. `MyTool.xlsm`) and import `xlsm_devkit.bas` manually (same as the initial setup step above).
+2. Place the optional `devkit_*.bas`, `devkit_*.frm`, and `devkit_*.frx` files from the xlsm_devkit release into `src/` next to the workbook (only the ones you need).
+3. Run `InitDevMode`. It creates `DEV_MyTool.xlsm` in the same folder and imports all `devkit_*` files from `src/` into the copy.
+4. Close `MyTool.xlsm` **without saving** — this keeps the production file free from devkit modules.
+5. Open `DEV_MyTool.xlsm` and develop there.
+
+**Release (`SaveAsRelease`)**
+
+When you are ready to ship:
+
+1. From `DEV_MyTool.xlsm`, run `SaveAsRelease`.
+2. It saves a copy named `MyTool.xlsm` (strips `DEV_` prefix) and removes all `xlsm_devkit` and `devkit_*` modules from that copy.
+3. The `DEV_MyTool.xlsm` workbook is unchanged — continue developing from it.
+
 ### Exporting
 
 Run `ExportAllModulesFormsSheetMaps` to export all modules, forms, and sheet maps at once.
