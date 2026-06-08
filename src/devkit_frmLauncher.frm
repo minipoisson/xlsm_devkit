@@ -1,7 +1,7 @@
 VERSION 5.00
 Begin {C62A69F0-16DC-11CE-9E98-00AA00574A4F} devkit_frmLauncher 
    Caption         =   "Launcher"
-   ClientHeight    =   5790
+   ClientHeight    =   6240
    ClientLeft      =   110
    ClientTop       =   450
    ClientWidth     =   4580
@@ -13,6 +13,7 @@ Attribute VB_GlobalNameSpace = False
 Attribute VB_Creatable = False
 Attribute VB_PredeclaredId = True
 Attribute VB_Exposed = False
+
 Option Explicit
 
 Private m_langCodes() As String
@@ -37,6 +38,8 @@ Private Sub UserForm_Initialize()
     
     btnInsertDelete.Caption = t("frmLauncher.btn_insert_delete", "Insert / Delete")
     btnMoveSetup.Caption = t("frmLauncher.btn_move_setup", "Move Setup")
+    btnSaveAsRelease.Caption = t("frmLauncher.btn_save_as_release", "Save as Release")
+    btnSaveAsRelease.Enabled = (UCase(Left(ThisWorkbook.Name, 4)) = "DEV_")
 
     If GetLangMeta("rtl") = "true" Then Me.RightToLeft = True
 
@@ -138,6 +141,11 @@ End Sub
 
 Private Sub btnMoveSetup_Click()
     Application.OnTime Now, "RunShowMoveSetupForm"
+    Unload Me
+End Sub
+
+Private Sub btnSaveAsRelease_Click()
+    Application.OnTime Now, "CallSaveAsRelease"
     Unload Me
 End Sub
 

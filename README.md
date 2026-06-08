@@ -17,6 +17,8 @@ Import `xlsm_devkit.bas` alone to get the following macros:
 | `CallImportAllComponents` | Imports all VBA modules and forms from `src/` |
 | `CallExportAllSheetMapsToMD` | Exports cell values, shapes, formulas, and styles of all sheets to `sheet/*.md` |
 | `CallImportAllSheetMapsFromMD` | Restores cell values, formulas, styles, named ranges, data-validation lists, and merged regions from `sheet/*.md` |
+| `CallInitDevMode` | Creates `DEV_<name>.xlsm` from the current workbook and imports all `devkit_*` files from `src/` into it |
+| `CallSaveAsRelease` | Saves a production copy (strips `DEV_` prefix, removes all devkit modules); call from a `DEV_` workbook |
 
 Modules (`.bas`) and forms (`.frm`/`.frx`) are handled together by the same export/import operation.  
 `xlsm_devkit` itself is never imported — a running module cannot overwrite itself.
@@ -94,19 +96,19 @@ SetLang ""     ' revert to system auto-detection
 
 When you want to keep the user-facing workbook free from devkit modules, use the `DEV_` naming convention:
 
-**Start development (`InitDevMode`)**
+**Start development (`CallInitDevMode`)**
 
 1. Open the production workbook (e.g. `MyTool.xlsm`) and import `xlsm_devkit.bas` manually (same as the initial setup step above).
 2. Place the optional `devkit_*.bas`, `devkit_*.frm`, and `devkit_*.frx` files from the xlsm_devkit release into `src/` next to the workbook (only the ones you need).
-3. Run `InitDevMode`. It creates `DEV_MyTool.xlsm` in the same folder and imports all `devkit_*` files from `src/` into the copy.
+3. Run `CallInitDevMode` from the Macro dialog (`Alt+F8`). It creates `DEV_MyTool.xlsm` in the same folder and imports all `devkit_*` files from `src/` into the copy.
 4. Close `MyTool.xlsm` **without saving** — this keeps the production file free from devkit modules.
 5. Open `DEV_MyTool.xlsm` and develop there.
 
-**Release (`SaveAsRelease`)**
+**Release (`CallSaveAsRelease`)**
 
 When you are ready to ship:
 
-1. From `DEV_MyTool.xlsm`, run `SaveAsRelease`.
+1. From `DEV_MyTool.xlsm`, run `CallSaveAsRelease` from the Macro dialog (`Alt+F8`), or use the **Save as Release** button in the Launcher (enabled only when the workbook name starts with `DEV_`).
 2. It saves a copy named `MyTool.xlsm` (strips `DEV_` prefix) and removes all `xlsm_devkit` and `devkit_*` modules from that copy.
 3. The `DEV_MyTool.xlsm` workbook is unchanged — continue developing from it.
 

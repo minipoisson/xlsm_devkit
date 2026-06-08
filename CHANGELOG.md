@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-06-08
+
 ### Added
 - `InitDevMode`: creates a `DEV_<name>.xlsm` copy of the current workbook and
   imports all `devkit_*` modules/forms found in `src/` into it, enabling a clean
@@ -11,12 +13,22 @@ All notable changes to this project will be documented in this file.
 - `SaveAsRelease`: strips all `xlsm_devkit` and `devkit_*` VBA components and saves
   a clean production copy (removes `DEV_` prefix from filename). Call from the DEV_
   workbook.
+- `CallInitDevMode` / `CallSaveAsRelease`: public entry-point wrappers callable from
+  the Macro dialog (`Alt+F8`) or a Quick Access Toolbar button.
+- `btnSaveAsRelease` button added to `devkit_frmLauncher`; enabled only when the
+  workbook name starts with `DEV_`.
+- `btn_save_as_release` i18n key added to all 27 language files.
 - `ImportComponentIntoProject`: private helper that imports a UTF-8 source file into
   any target VBProject (used by `InitDevMode` for cross-workbook injection).
 - `IsDevkitComponent`: private helper that identifies devkit module names (used by
   `SaveAsRelease` for stripping).
 - DEV/release workflow documented in README (English and Japanese).
 - 11 new i18n keys (`init_*`, `release_*`) added to all 27 language files.
+
+### Fixed
+- `InitDevMode` / `SaveAsRelease`: replaced `AutomationSecurity = msoAutomationSecurityForceDisable`
+  with `EnableEvents = False` when opening workbooks, preventing VBProject lockout that caused
+  silent termination with no error raised.
 
 ## [1.4.3] - 2026-06-06
 

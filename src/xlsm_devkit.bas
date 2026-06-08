@@ -15,6 +15,8 @@ Private Declare Function GetLocaleInfoA Lib "kernel32" ( _
 
 ' Core module. No dependencies on optional feature modules.
 ' Entry points callable from feature modules:
+'   CallInitDevMode  - create DEV_ copy of this workbook and inject devkit_* modules from src/
+'   CallSaveAsRelease    - strip devkit modules and save production copy (call from DEV_ workbook)
 '   ExportAllModulesFormsSheetMaps - export all VBA modules, forms, and sheet maps to src/ and sheet/?
 '   ImportAllModulesFormsSheetMaps - import all VBA modules, forms, and sheet maps from src/ and sheet/?
 '   CallExportAllComponents  - export all VBA components and forms to src/
@@ -22,21 +24,27 @@ Private Declare Function GetLocaleInfoA Lib "kernel32" ( _
 '   CallExportAllSheetMapsToMD - export all sheet maps to sheet/ as Markdown files
 '   CallImportAllSheetMapsFromMD - import all sheet maps from sheet/ Markdown files
 '   ExportSheetToMDFile(ws as Worksheet, filePath as String) - export a single sheet map to a specified Markdown file
-'   InitDevMode      - create DEV_ copy of this workbook and inject devkit_* modules from src/
-'   SaveAsRelease    - strip devkit modules and save production copy (call from DEV_ workbook)
 
 Private Const MODULE_NAME As String = "xlsm_devkit"
 ' Set True to skip optional devkit feature modules on import (recommended for users).
 ' Set False when developing devkit optional modules themselves.
 Private Const SKIP_DEVKIT_MODULES As Boolean = True
 
+' NOTE: This module itself is NOT imported by ImportAllComponents()
+' because a module cannot delete or overwrite itself.
+
 Public g_LangCode  As String
 Public g_LangCache As Object
 Public g_EnCache   As Object
 Private m_LangCodeDetected As String
 
-' NOTE: This module itself is NOT imported by ImportAllComponents()
-' because a module cannot delete or overwrite itself.
+Public Sub CallInitDevMode()
+    InitDevMode
+End Sub
+
+Public Sub CallSaveAsRelease()
+    SaveAsRelease
+End Sub
 
 Public Sub ExportAllModulesFormsSheetMaps()
     If MsgBox(t("msg.export_all_confirm", "Export all modules, forms, and sheet maps to src/ and sheet/?"), _
@@ -67,7 +75,6 @@ End Sub
 Public Sub CallImportAllSheetMapsFromMD()
     ImportAllSheetMapsFromMD
 End Sub
-
 
 Private Function CheckVBProjectAccess() As Boolean
     On Error Resume Next
@@ -1399,8 +1406,7 @@ End Function
 
 
 ' ── Dev/Release lifecycle ────────────────────────────────────────────────────
-
-Public Sub InitDevMode()
+Private Sub InitDevMode()
     If UCase(Left(ThisWorkbook.Name, 4)) = "DEV_" Then
         MsgBox t("msg.init_already_dev", "This workbook already has the DEV_ prefix. Call InitDevMode() from a production workbook."), vbExclamation
         Exit Sub
@@ -1427,15 +1433,15 @@ Public Sub InitDevMode()
     End If
 
     Dim devWb As Workbook
-    Dim prevSecurity As Long
-    prevSecurity = Application.AutomationSecurity
+    Dim prevEvents As Boolean
+    prevEvents = Application.EnableEvents
 
     On Error GoTo ErrHandler
     ThisWorkbook.SaveCopyAs devPath
 
-    Application.AutomationSecurity = 3  ' msoAutomationSecurityForceDisable
+    Application.EnableEvents = False
     Set devWb = Workbooks.Open(devPath, UpdateLinks:=0)
-    Application.AutomationSecurity = prevSecurity
+    Application.EnableEvents = prevEvents
 
     Dim srcDir As String
     srcDir = ThisWorkbook.Path & "\src"
@@ -1464,7 +1470,7 @@ Public Sub InitDevMode()
     Exit Sub
 
 ErrHandler:
-    Application.AutomationSecurity = prevSecurity
+    Application.EnableEvents = prevEvents
     Dim initErrDesc As String: initErrDesc = Err.Description
     On Error Resume Next
     If Not devWb Is Nothing Then devWb.Close SaveChanges:=False
@@ -1472,7 +1478,7 @@ ErrHandler:
 End Sub
 
 
-Public Sub SaveAsRelease()
+Private Sub SaveAsRelease()
     If UCase(Left(ThisWorkbook.Name, 4)) <> "DEV_" Then
         MsgBox t("msg.release_no_dev_prefix", "This workbook does not have the DEV_ prefix. SaveAsRelease() must be called from a DEV_ workbook."), vbExclamation
         Exit Sub
@@ -1495,15 +1501,15 @@ Public Sub SaveAsRelease()
     End If
 
     Dim relWb As Workbook
-    Dim prevSecurity As Long
-    prevSecurity = Application.AutomationSecurity
+    Dim prevEvents As Boolean
+    prevEvents = Application.EnableEvents
 
     On Error GoTo ErrHandler
     ThisWorkbook.SaveCopyAs releasePath
 
-    Application.AutomationSecurity = 3  ' msoAutomationSecurityForceDisable
+    Application.EnableEvents = False
     Set relWb = Workbooks.Open(releasePath, UpdateLinks:=0)
-    Application.AutomationSecurity = prevSecurity
+    Application.EnableEvents = prevEvents
 
     ' Collect devkit component names first (avoid modifying collection while iterating)
     Dim comp As Object
@@ -1532,7 +1538,7 @@ Public Sub SaveAsRelease()
     Exit Sub
 
 ErrHandler:
-    Application.AutomationSecurity = prevSecurity
+    Application.EnableEvents = prevEvents
     Dim relErrDesc As String: relErrDesc = Err.Description
     On Error Resume Next
     If Not relWb Is Nothing Then relWb.Close SaveChanges:=False
