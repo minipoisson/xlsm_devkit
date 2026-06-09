@@ -156,6 +156,16 @@ VBA の `VBComponents.Export` / `VBComponents.Import` はシステムの ANSI �
   sheet/        # エクスポートされたシートマップ .md ファイル（BOM なし UTF-8）
 ```
 
+## アップグレード
+
+`xlsm_devkit.bas` を新しいバージョンに差し替えた場合は、シートマップを再エクスポートしてください。
+
+1. 新しい `xlsm_devkit.bas` を VBE にインポートします。
+2. `CallExportAllSheetMapsToMD` を実行し、`sheet/*.md` を現行の形式で再生成します。
+3. 更新された `sheet/*.md` をコミットします。
+
+バージョン間でシートマップのフォーマットが変わることがあるため、古いバージョンで生成したファイルは新しいバージョンで正しくインポートされない場合があります。
+
 ## 制約事項
 
 - `xlsm_devkit` 自身は `ImportAllModulesFormsSheetMaps` や `CallImportAllComponents` によってインポートされません（実行中のモジュールは上書き・削除できないため）。`xlsm_devkit` を更新する場合は、手動で VBE に貼り付けてください。

@@ -1,3 +1,6 @@
 # .gitattributes
 * text=auto
 *.bas text eol=crlf
+*.frm text eol=crlf
+*.cls text eol=crlf
+*.frx binary

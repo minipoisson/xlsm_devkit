@@ -4,6 +4,33 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-06-09
+
+### Added
+- Export progress: `Application.StatusBar` shows "Exporting sheet map N/N: `<sheet>`" during `ExportAllSheetMapsToMD`; status bar is restored in a `lblFin` handler even if an export error occurs.
+- `NumFmt:<format>` style token: exports the cell's number format (when it is not `General`) and re-applies it on import (roundtrip).
+- `Unlocked` style token: exports `rng.Locked = False` and re-applies on import (roundtrip).
+- `HAlign:<value>` / `VAlign:<value>` import-only style tokens: apply horizontal or vertical alignment when written manually in a sheet map (`general`, `left`, `center`, `right`, `fill`, `justify`, `distributed`, and numeric `XlHAlign` / `XlVAlign` values are accepted; not exported).
+- `EscapeStyleValue` / `UnescapeStyleValue`: new private helpers; extend `EscapeCellValue` / `UnescapeCellValue` by also escaping `;` as `\;`, allowing number-format strings that contain semicolons (e.g. `#,##0.00;[Red]-#,##0.00`) to round-trip correctly.
+- `\-` escape sequence (`\-` decodes to `-`) added to both `UnescapeCellValue` and `UnescapeStyleValue`; shape export now emits `\-` instead of the `-` sentinel when a shape label or OnAction string is the literal character `"-"`.
+- `ParseStyleTokens`: new private helper; splits style strings on unescaped `;` (respects `\;`).
+- `DevkitStringBuilder` UDT with `StringBuilderInit` / `StringBuilderAppend` / `StringBuilderToString`; used in `GenerateSheetMapMarkdown` to build output in O(n) rather than O(n^2).
+- `IMPORT_DIAGNOSTICS_ENABLED` constant (default `False`): when set `True`, `StartImportDiagnosticLog` / `LogImportDiagnostic` append diagnostic events to `devkit_import_diagnostics.log` (FSO TextStream, one open/close per call for crash safety) in the workbook folder.
+- `AbortIfProtectedImportSheets`: pre-import guard; shows a message and aborts if any target sheet is protected.
+- `ApplyShapeMapMarkdown`: new private sub; reads the `## Shapes` section of a sheet map and applies label, formula, OnAction, and style back onto the worksheet (updates existing shapes by name, or creates a rectangle placeholder for shapes not found).
+
+### Changed
+- `ApplyCellStyle`: rewritten to use `ParseStyleTokens` (escape-aware) instead of `Split(styleStr, "; ")`; adds `NumFmt`, `Unlocked`, `HAlign`, `VAlign` handling; errors during token application are now logged via `LogImportDiagnostic` instead of silently swallowed.
+- `GenerateSheetMapMarkdown`: refactored to use `DevkitStringBuilder`; style-building extracted into `BuildCellStyle`; shape labels, OnAction strings, and formula strings are now escaped with `EscapeCellValue`.
+- `ParseMDTableRow`: rewritten to use `TrimMDTableField` (strips exactly one leading and one trailing space) instead of `Trim` per field; preserves leading/trailing whitespace in cell values.
+- `ImportAllSheetMapsFromMD`: now calls `AbortIfProtectedImportSheets` before starting; `ImportAllModulesFormsSheetMaps` also calls it in advance.
+
+### Fixed
+- Export: cells containing error values (`#DIV/0!`, `#REF!`, etc.) now export `rng.Text` as a fallback instead of raising a runtime error.
+- `ExportAllSheetMapsToMD`: added `lblErr` / `lblFin` error handler that restores `Application.StatusBar` and `DisplayStatusBar` even if an error occurs mid-export.
+- `ReconstructMerges`, `ApplyHiddenRows`, `ApplyHiddenCols`: added per-operation `On Error Resume Next` guards with `LogImportDiagnostic` logging so individual cell/row/column failures no longer abort the entire import.
+- `ApplySheetMapMarkdown`: removed a redundant `On Error Resume Next` immediately before `On Error GoTo 0` in the pre-clear block.
+
 ## [1.5.0] - 2026-06-08
 
 ### Added
