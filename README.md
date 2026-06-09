@@ -127,7 +127,7 @@ To export only sheet maps, run `CallExportAllSheetMapsToMD`.
 Run `ImportAllModulesFormsSheetMaps` to import all modules, forms, and sheet maps at once.
 
 - Files from `src/` are loaded into the project. Existing modules/forms are updated; new ones are added. Companion `*.frx` files are picked up automatically.
-- Each `sheet/*.md` is applied to the corresponding sheet: cell values, formulas, background/foreground colors, font sizes, data-validation lists, named ranges, and merged regions are all restored.
+- Each `sheet/*.md` is applied to the corresponding sheet: cell values, formulas, background/foreground colors, font sizes, number formats, alignment, cell protection, data-validation lists, named ranges, and merged regions are all restored.
 
 To import only modules and forms (without sheet maps), run `CallImportAllComponents`.  
 To import only sheet maps, run `CallImportAllSheetMapsFromMD`.
