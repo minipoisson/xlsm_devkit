@@ -2359,8 +2359,16 @@ Private Sub InitDevMode()
     Dim fso As Object
     Set fso = CreateObject("Scripting.FileSystemObject")
 
+    Dim srcExt As String
+    srcExt = LCase(fso.GetExtensionName(ThisWorkbook.Name))
+
     Dim devPath As String
-    devPath = ThisWorkbook.Path & "\DEV_" & ThisWorkbook.Name
+    If srcExt = "xlsx" Then
+        ' .xlsx cannot hold VBA -- DEV_ copy must be .xlsm
+        devPath = ThisWorkbook.Path & "\DEV_" & fso.GetBaseName(ThisWorkbook.Name) & ".xlsm"
+    Else
+        devPath = ThisWorkbook.Path & "\DEV_" & ThisWorkbook.Name
+    End If
 
     If fso.FileExists(devPath) Then
         If MsgBox(Fmt(t("msg.init_overwrite_confirm", "'{0}' already exists. Overwrite?"), devPath), _
@@ -2374,13 +2382,23 @@ Private Sub InitDevMode()
     Dim devWb As Workbook
     Dim prevEvents As Boolean
     prevEvents = Application.EnableEvents
+    Dim tempPath As String
 
     On Error GoTo ErrHandler
-    ThisWorkbook.SaveCopyAs devPath
 
-    Application.EnableEvents = False
-    Set devWb = Workbooks.Open(devPath, UpdateLinks:=0)
-    Application.EnableEvents = prevEvents
+    If srcExt = "xlsx" Then
+        ' SaveCopyAs preserves format; use a temp .xlsx, then SaveAs .xlsm
+        tempPath = ThisWorkbook.Path & "\_devkittmp_" & ThisWorkbook.Name
+        ThisWorkbook.SaveCopyAs tempPath
+        Application.EnableEvents = False
+        Set devWb = Workbooks.Open(tempPath, UpdateLinks:=0)
+        Application.EnableEvents = prevEvents
+    Else
+        ThisWorkbook.SaveCopyAs devPath
+        Application.EnableEvents = False
+        Set devWb = Workbooks.Open(devPath, UpdateLinks:=0)
+        Application.EnableEvents = prevEvents
+    End If
 
     Dim srcDir As String
     srcDir = ThisWorkbook.Path & "\src"
@@ -2400,8 +2418,17 @@ Private Sub InitDevMode()
         Next f
     End If
 
-    devWb.Save
-    devWb.Close SaveChanges:=False
+    If srcExt = "xlsx" Then
+        Application.DisplayAlerts = False
+        devWb.SaveAs devPath, FileFormat:=xlOpenXMLWorkbookMacroEnabled
+        Application.DisplayAlerts = True
+        devWb.Close SaveChanges:=False
+        fso.DeleteFile tempPath, True
+        tempPath = ""
+    Else
+        devWb.Save
+        devWb.Close SaveChanges:=False
+    End If
 
     MsgBox Fmt(t("msg.init_complete", "DEV_ copy created: {0}" & vbLf & vbLf & _
                  "Close this workbook WITHOUT saving (Ctrl+W -> Don't Save) to keep the production file clean."), _
@@ -2410,9 +2437,13 @@ Private Sub InitDevMode()
 
 ErrHandler:
     Application.EnableEvents = prevEvents
+    Application.DisplayAlerts = True
     Dim initErrDesc As String: initErrDesc = Err.Description
     On Error Resume Next
     If Not devWb Is Nothing Then devWb.Close SaveChanges:=False
+    If Len(tempPath) > 0 Then
+        If fso.FileExists(tempPath) Then fso.DeleteFile tempPath, True
+    End If
     MsgBox Fmt(t("msg.init_failed", "Failed to create DEV_ copy: {0}"), initErrDesc), vbCritical
 End Sub
 

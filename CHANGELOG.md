@@ -4,6 +4,9 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- `InitDevMode` (.xlsx support): when the source workbook is `.xlsx`, the DEV_ copy is now created as `.xlsm` (macro-enabled format) instead of `.xlsx`. A temporary `.xlsx` file is used internally during the copy+import step and deleted after `SaveAs` completes. This allows `CallInitDevMode` to be used on `.xlsx` workbooks that contain complex formulas or data, while still injecting the devkit VBA components correctly.
+
 ## [1.6.0] - 2026-06-09
 
 ### Added
