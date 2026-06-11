@@ -2418,6 +2418,18 @@ Private Sub InitDevMode()
         Next f
     End If
 
+    ' For .xlsx source: SaveCopyAs strips VBA, so xlsm_devkit itself is absent in the temp copy.
+    ' Import it explicitly from src/ the same way devkit_* modules are imported above.
+    If srcExt = "xlsx" Then
+        Dim devkitBasPath As String
+        devkitBasPath = srcDir & "\xlsm_devkit.bas"
+        If fso.FileExists(devkitBasPath) Then
+            If Not ImportComponentIntoProject(devWb.VBProject, devkitBasPath) Then
+                MsgBox "Failed to import component: xlsm_devkit.bas", vbExclamation
+            End If
+        End If
+    End If
+
     If srcExt = "xlsx" Then
         Application.DisplayAlerts = False
         devWb.SaveAs devPath, FileFormat:=xlOpenXMLWorkbookMacroEnabled
