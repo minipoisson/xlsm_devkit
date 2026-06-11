@@ -525,10 +525,18 @@ Sub ImportAllSheetMapsFromMD(Optional skipConfirm As Boolean = False)
     preEvents = Application.EnableEvents
     Application.EnableEvents = False
 
+    Dim oldStatusBar As Variant
+    Dim oldDisplayStatusBar As Boolean
+    oldStatusBar = Application.StatusBar
+    oldDisplayStatusBar = Application.DisplayStatusBar
+    Application.DisplayStatusBar = True
+
     Dim ws As Worksheet
     Dim sheetFolderPath As String
     Dim fileName As String
     Dim mdContent As String
+    Dim sheetIndex As Long
+    Dim sheetCount As Long
 
     On Error GoTo lblErr
     sheetFolderPath = ThisWorkbook.Path & "\sheet"
@@ -544,7 +552,11 @@ Sub ImportAllSheetMapsFromMD(Optional skipConfirm As Boolean = False)
         GoTo lblFin
     End If
 
+    sheetCount = ThisWorkbook.Worksheets.Count
     For Each ws In ThisWorkbook.Worksheets
+        sheetIndex = sheetIndex + 1
+        Application.StatusBar = Fmt(t("status.import_sheet_map", "Importing sheet map {0}/{1}: {2}"), _
+                                    sheetIndex, sheetCount, ws.Name)
         fileName = sheetFolderPath & "\" & ws.codeName & ".md"
         If fso.FileExists(fileName) Then
             LogImportDiagnostic "Sheet import start codeName=" & ws.codeName & _
@@ -571,6 +583,10 @@ lblErr:
     "Error importing sheet maps. Some sheets may be partially updated.") _
     & vbCrLf & Err.Description, vbExclamation
 lblFin:
+    On Error Resume Next
+    Application.StatusBar = oldStatusBar
+    Application.DisplayStatusBar = oldDisplayStatusBar
+    On Error GoTo 0
     Application.EnableEvents = preEvents
     Application.Calculation = preCalcMode
     Application.ScreenUpdating = preScreenUpdate
@@ -688,17 +704,81 @@ Private Function StringBuilderToString(ByRef sb As DevkitStringBuilder) As Strin
     StringBuilderToString = Join(sb.Parts, "")
 End Function
 
-Private Function GenerateSheetMapMarkdown(ws As Worksheet) As String
-    Dim rng As Range
-    Dim mapText As DevkitStringBuilder
-    Dim role As String
+Private Function RenderCellRow(rng As Range) As String
+    ' Returns the Markdown table row for rng in its current state (no trailing vbCrLf).
+    ' Returns "" for blank/unformatted non-merged cells (not exported).
     Dim cellName As String
     Dim styleParts As String
     Dim mergeMarker As String
     Dim cellValue As Variant
     Dim cellValueText As String
     Dim cellFormulaText As String
+    Dim role As String
     Dim shouldExportCell As Boolean
+
+    If rng.MergeCells And Not (rng.Row = rng.MergeArea.Row _
+    And rng.Column = rng.MergeArea.Column) Then
+        cellName = ""
+        On Error Resume Next
+        cellName = rng.Name.Name
+        If cellName = "" Then cellName = "-"
+        On Error GoTo 0
+
+        If rng.Row = rng.MergeArea.Row Then
+            mergeMarker = "!merged_left"
+        ElseIf rng.Column = rng.MergeArea.Column Then
+            mergeMarker = "!merged_up"
+        Else
+            mergeMarker = "!merged_ul"
+        End If
+
+        styleParts = BuildCellStyle(rng)
+        RenderCellRow = "| " & rng.Address(False, False) & _
+                        " | " & cellName & _
+                        " | " & mergeMarker & _
+                        " | -" & _
+                        " | " & IIf(styleParts = "", "-", styleParts) & " |"
+    Else
+        cellValue = rng.Value
+        If IsError(cellValue) Then
+            cellValueText = rng.Text
+            shouldExportCell = (cellValueText <> "" _
+            Or rng.HasFormula Or rng.Interior.ColorIndex <> xlNone)
+        Else
+            cellValueText = CStr(cellValue)
+            shouldExportCell = (cellValueText <> "" _
+            Or rng.HasFormula Or rng.Interior.ColorIndex <> xlNone)
+        End If
+
+        If Not shouldExportCell Then Exit Function
+
+        cellName = ""
+        On Error Resume Next
+        cellName = rng.Name.Name
+        If cellName = "" Then cellName = "-"
+        On Error GoTo 0
+
+        styleParts = BuildCellStyle(rng)
+        role = IIf(styleParts = "", "-", styleParts)
+
+        If rng.HasFormula Then
+            cellFormulaText = "`" & EscapeCellValue(CStr(rng.Formula)) & "`"
+        Else
+            cellFormulaText = "-"
+        End If
+
+        RenderCellRow = "| " & rng.Address(False, False) & _
+                        " | " & cellName & _
+                        " | " & EscapeCellValue(cellValueText) & _
+                        " | " & cellFormulaText & _
+                        " | " & role & " |"
+    End If
+End Function
+
+Private Function GenerateSheetMapMarkdown(ws As Worksheet) As String
+    Dim rng As Range
+    Dim mapText As DevkitStringBuilder
+    Dim rowStr As String
 
     StringBuilderInit mapText
     StringBuilderAppend mapText, "# Sheet Configuration" & vbCrLf
@@ -720,64 +800,8 @@ Private Function GenerateSheetMapMarkdown(ws As Worksheet) As String
     StringBuilderAppend mapText, "| :--- | :--- | :--- | :--- | :--- |" & vbCrLf
     
     For Each rng In ws.UsedRange
-        cellValue = rng.Value
-        If IsError(cellValue) Then
-            cellValueText = rng.Text
-            shouldExportCell = (cellValueText <> "" _
-            Or rng.HasFormula Or rng.Interior.ColorIndex <> xlNone)
-        Else
-            cellValueText = CStr(cellValue)
-            shouldExportCell = (cellValueText <> "" _
-            Or rng.HasFormula Or rng.Interior.ColorIndex <> xlNone)
-        End If
-
-        If rng.MergeCells And Not (rng.Row = rng.MergeArea.Row _
-        And rng.Column = rng.MergeArea.Column) Then
-            ' Slave cell in a merged range
-            cellName = ""
-            On Error Resume Next
-            cellName = rng.Name.Name
-            If cellName = "" Then cellName = "-"
-            On Error GoTo 0
-
-            If rng.Row = rng.MergeArea.Row Then
-                mergeMarker = "!merged_left"
-            ElseIf rng.Column = rng.MergeArea.Column Then
-                mergeMarker = "!merged_up"
-            Else
-                mergeMarker = "!merged_ul"
-            End If
-
-            styleParts = BuildCellStyle(rng)
-
-            StringBuilderAppend mapText, "| " & rng.Address(False, False) & _
-                                 " | " & cellName & _
-                                 " | " & mergeMarker & _
-                                 " | -" & _
-                                 " | " & IIf(styleParts = "", "-", styleParts) & " |" & vbCrLf
-        ElseIf shouldExportCell Then
-            ' Normal cell (or master cell of a merged range)
-            cellName = ""
-            On Error Resume Next
-            cellName = rng.Name.Name
-            If cellName = "" Then cellName = "-"
-            On Error GoTo 0
-
-            styleParts = BuildCellStyle(rng)
-            role = IIf(styleParts = "", "-", styleParts)
-
-            If rng.HasFormula Then
-                cellFormulaText = "`" & EscapeCellValue(CStr(rng.Formula)) & "`"
-            Else
-                cellFormulaText = "-"
-            End If
-
-            StringBuilderAppend mapText, "| " & rng.Address(False, False) & _
-                                 " | " & cellName & _
-                                 " | " & EscapeCellValue(cellValueText) & _
-                                 " | " & cellFormulaText & _
-                                 " | " & role & " |" & vbCrLf
-        End If
+        rowStr = RenderCellRow(rng)
+        If rowStr <> "" Then StringBuilderAppend mapText, rowStr & vbCrLf
     Next
     
     Dim shp As Object
@@ -884,24 +908,16 @@ Private Sub ApplySheetMapMarkdown(ws As Worksheet, mdContent As String)
     Dim valueApplied As Long
     Dim blankOrStyleRows As Long
     Dim mergeRows As Long
+    Dim skippedRows As Long
+    Dim mdAddrs As Object
+    Dim j As Long
+    Dim passLine As String
+    Dim passCols() As String
+    Dim passAddr As String
+    Dim cleanupCell As Range
+    Dim currentRow As String
     hiddenRowsStr = ""
     hiddenColsStr = ""
-
-    ' Pre-clear cell data, formatting, merges, and validation
-    On Error Resume Next
-    Err.Clear
-    ws.Cells.UnMerge
-    If Err.Number <> 0 Then LogImportDiagnostic "WARN sheet=" & ws.codeName & " unmerge failed " & ErrText()
-    Err.Clear
-    ws.Cells.ClearContents
-    If Err.Number <> 0 Then LogImportDiagnostic "ERROR sheet=" & ws.codeName & " ClearContents failed " & ErrText()
-    Err.Clear
-    ws.Cells.ClearFormats
-    If Err.Number <> 0 Then LogImportDiagnostic "ERROR sheet=" & ws.codeName & " ClearFormats failed " & ErrText()
-    Err.Clear
-    ws.Cells.Validation.Delete
-    If Err.Number <> 0 Then LogImportDiagnostic "WARN sheet=" & ws.codeName & " Validation.Delete failed " & ErrText()
-    On Error GoTo 0
 
     ' Normalize line endings and split
     normContent = Replace(mdContent, vbCrLf, vbLf)
@@ -910,6 +926,39 @@ Private Sub ApplySheetMapMarkdown(ws As Worksheet, mdContent As String)
     LogImportDiagnostic "ApplySheetMapMarkdown start sheet=" & ws.codeName & _
                         " name=" & ws.Name & _
                         " lineCount=" & (UBound(lines) + 1)
+
+    ' Pass 0: collect address set from Markdown for incremental cleanup
+    Set mdAddrs = CreateObject("Scripting.Dictionary")
+    For j = 0 To UBound(lines)
+        passLine = Trim(lines(j))
+        If passLine = "## Shapes" Then Exit For
+        If Left(passLine, 1) = "|" And Left(passLine, 3) <> "| :" And _
+           Left(passLine, 10) <> "| Address " Then
+            passCols = ParseMDTableRow(passLine)
+            If UBound(passCols) >= 4 Then
+                passAddr = Trim(passCols(0))
+                If passAddr <> "" Then mdAddrs(passAddr) = True
+            End If
+        End If
+    Next j
+
+    ' Unmerge all (required for Pass 2 merge reconstruction)
+    On Error Resume Next
+    Err.Clear
+    ws.Cells.UnMerge
+    If Err.Number <> 0 Then LogImportDiagnostic "WARN sheet=" & ws.codeName & " unmerge failed " & ErrText()
+    On Error GoTo 0
+
+    ' Cleanup: clear cells in UsedRange that are not in the Markdown
+    On Error Resume Next
+    For Each cleanupCell In ws.UsedRange
+        If Not mdAddrs.Exists(cleanupCell.Address(False, False)) Then
+            cleanupCell.ClearContents
+            cleanupCell.ClearFormats
+            cleanupCell.Validation.Delete
+        End If
+    Next cleanupCell
+    On Error GoTo 0
 
     inCellTable = False
     slaveCount = 0
@@ -974,7 +1023,14 @@ Private Sub ApplySheetMapMarkdown(ws As Worksheet, mdContent As String)
                         masterAddrs(slaveCount) = mAddr
                         slaveCount = slaveCount + 1
                     Else
-                        ' Normal or master cell
+                        ' Normal or master cell: skip if current state matches Markdown
+                        currentRow = RenderCellRow(rng)
+                        If currentRow = line Then
+                            skippedRows = skippedRows + 1
+                            GoTo NextRow
+                        End If
+                        rng.ClearFormats
+                        rng.Validation.Delete
                         If cFormula <> "-" And cFormula <> "" Then
                             fml = cFormula
                             If Left(fml, 1) = "`" And Right(fml, 1) = "`" Then
@@ -1031,6 +1087,7 @@ Private Sub ApplySheetMapMarkdown(ws As Worksheet, mdContent As String)
                                     " line=" & ShortLogText(line)
             End If
         End If
+NextRow:
     Next i
 
     ' Pass 2: reconstruct merged ranges
@@ -1041,6 +1098,7 @@ Private Sub ApplySheetMapMarkdown(ws As Worksheet, mdContent As String)
     ApplyShapeMapMarkdown ws, lines
     LogImportDiagnostic "ApplySheetMapMarkdown summary sheet=" & ws.codeName & _
                         " parsed=" & parsedRows & _
+                        " skipped=" & skippedRows & _
                         " formulas=" & formulaApplied & _
                         " values=" & valueApplied & _
                         " blankOrStyle=" & blankOrStyleRows & _
