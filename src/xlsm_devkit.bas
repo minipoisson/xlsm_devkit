@@ -932,6 +932,7 @@ Private Sub ApplySheetMapMarkdown(ws As Worksheet, mdContent As String)
     ' to avoid COM calls.  No address dictionary needed -- cleanup now clears the
     ' entire bounding box instead of building a cell-by-cell Union.
     Dim pRow As Long, pCol As Long
+    Dim sRow As Long, sCol As Long
     For j = 0 To UBound(lines)
         passLine = Trim(lines(j))
         If passLine = "## Shapes" Then Exit For
@@ -1000,40 +1001,45 @@ Private Sub ApplySheetMapMarkdown(ws As Worksheet, mdContent As String)
                 cStyle = Trim(cols(4))
                 parsedRows = parsedRows + 1
 
-                Set rng = Nothing
-                On Error Resume Next
-                Err.Clear
-                Set rng = ws.Range(addr)
-                If Err.Number <> 0 Then
-                    LogImportDiagnostic "ERROR sheet=" & ws.codeName & _
-                                        " mdLine=" & (i + 1) & _
-                                        " invalid address=" & ShortLogText(addr) & _
-                                        " " & ErrText()
-                    invalidAddressRows = invalidAddressRows + 1
-                    Err.Clear
-                End If
-                On Error GoTo 0
-
-                If Not rng Is Nothing Then
-                    If cValue = "!merged_left" Or cValue = "!merged_up" Or cValue = "!merged_ul" Then
-                        ' Slave cell: record for Pass 2 only.  No style needed -- bounding
-                        ' box was already cleared and master style propagates after re-merge.
-                        If cName <> "-" Then ApplyCellName ws, rng, cName
-                        mergeRows = mergeRows + 1
-
-                        If cValue = "!merged_left" Then
-                            refAddr = ws.Cells(rng.Row, rng.Column - 1).Address(False, False)
-                        Else
-                            ' !merged_up or !merged_ul: follow upward to find master
-                            refAddr = ws.Cells(rng.Row - 1, rng.Column).Address(False, False)
-                        End If
-                        mAddr = ResolveMasterAddr(refAddr, slaveAddrs, masterAddrs, slaveCount)
-
-                        slaveAddrs(slaveCount) = addr
-                        masterAddrs(slaveCount) = mAddr
-                        slaveCount = slaveCount + 1
+                If cValue = "!merged_left" Or cValue = "!merged_up" Or cValue = "!merged_ul" Then
+                    ' Slave cell: use pure string parsing -- no COM calls per slave.
+                    ' Large sheets (~6000 slaves) would otherwise cost ~18000 ws.Cells calls.
+                    sRow = AddrRowNum(addr)
+                    sCol = AddrColNum(addr)
+                    If cValue = "!merged_left" Then
+                        refAddr = CellAddrStr(sRow, sCol - 1)
                     Else
-                        ' Normal or master cell: bounding box already cleared, apply directly.
+                        refAddr = CellAddrStr(sRow - 1, sCol)
+                    End If
+                    mAddr = ResolveMasterAddr(refAddr, slaveAddrs, masterAddrs, slaveCount)
+                    slaveAddrs(slaveCount) = addr
+                    masterAddrs(slaveCount) = mAddr
+                    slaveCount = slaveCount + 1
+                    mergeRows = mergeRows + 1
+                    If cName <> "-" Then
+                        Set rng = Nothing
+                        On Error Resume Next
+                        Set rng = ws.Range(addr)
+                        On Error GoTo 0
+                        If Not rng Is Nothing Then ApplyCellName ws, rng, cName
+                    End If
+                Else
+                    ' Normal or master cell: resolve range and apply.
+                    Set rng = Nothing
+                    On Error Resume Next
+                    Err.Clear
+                    Set rng = ws.Range(addr)
+                    If Err.Number <> 0 Then
+                        LogImportDiagnostic "ERROR sheet=" & ws.codeName & _
+                                            " mdLine=" & (i + 1) & _
+                                            " invalid address=" & ShortLogText(addr) & _
+                                            " " & ErrText()
+                        invalidAddressRows = invalidAddressRows + 1
+                        Err.Clear
+                    End If
+                    On Error GoTo 0
+
+                    If Not rng Is Nothing Then
                         If cFormula <> "-" And cFormula <> "" Then
                             fml = cFormula
                             If Left(fml, 1) = "`" And Right(fml, 1) = "`" Then
@@ -1075,12 +1081,12 @@ Private Sub ApplySheetMapMarkdown(ws As Worksheet, mdContent As String)
                         End If
                         ApplyCellStyle rng, cStyle
                         If cName <> "-" Then ApplyCellName ws, rng, cName
+                    ElseIf Err.Number = 0 Then
+                        LogImportDiagnostic "ERROR sheet=" & ws.codeName & _
+                                            " mdLine=" & (i + 1) & _
+                                            " address resolved to Nothing addr=" & ShortLogText(addr)
+                        invalidAddressRows = invalidAddressRows + 1
                     End If
-                ElseIf Err.Number = 0 Then
-                    LogImportDiagnostic "ERROR sheet=" & ws.codeName & _
-                                        " mdLine=" & (i + 1) & _
-                                        " address resolved to Nothing addr=" & ShortLogText(addr)
-                    invalidAddressRows = invalidAddressRows + 1
                 End If
             Else
                 malformedRows = malformedRows + 1
@@ -1913,66 +1919,47 @@ Private Function ResolveMasterAddr(refAddr As String, slaveAddrs() As String, ma
 End Function
 
 Private Sub ReconstructMerges(ws As Worksheet, slaveAddrs() As String, masterAddrs() As String, slaveCount As Long)
+    ' Use AddrRowNum/AddrColNum/CellAddrStr throughout to avoid ws.Range COM calls
+    ' for each of the ~6000 slave entries that caused large sheets to freeze.
     Dim processed() As Boolean
     ReDim processed(slaveCount - 1)
     Dim i As Long, j As Long
     Dim mAddr As String
-    Dim masterRng As Range
-    Dim slvRng As Range
     Dim minRow As Long, maxRow As Long, minCol As Long, maxCol As Long
+    Dim slvRow As Long, slvCol As Long
 
     For i = 0 To slaveCount - 1
         If Not processed(i) Then
             mAddr = masterAddrs(i)
-            On Error Resume Next
-            Err.Clear
-            Set masterRng = ws.Range(mAddr)
-            If Err.Number <> 0 Or masterRng Is Nothing Then
+            minRow = AddrRowNum(mAddr)
+            If minRow <= 0 Then
                 LogImportDiagnostic "ERROR sheet=" & ws.codeName & _
-                                    " reconstruct merge master failed master=" & ShortLogText(mAddr) & _
-                                    " " & ErrText()
-                Err.Clear
-                On Error GoTo 0
+                                    " reconstruct merge master invalid addr=" & ShortLogText(mAddr)
                 GoTo lblNextMerge
             End If
-            On Error GoTo 0
-            minRow = masterRng.Row
-            maxRow = masterRng.Row
-            minCol = masterRng.Column
-            maxCol = masterRng.Column
+            maxRow = minRow
+            minCol = AddrColNum(mAddr)
+            maxCol = minCol
 
             For j = 0 To slaveCount - 1
                 If masterAddrs(j) = mAddr Then
-                    On Error Resume Next
-                    Err.Clear
-                    Set slvRng = ws.Range(slaveAddrs(j))
-                    If Err.Number <> 0 Or slvRng Is Nothing Then
-                        LogImportDiagnostic "ERROR sheet=" & ws.codeName & _
-                                            " reconstruct merge slave failed slave=" & ShortLogText(slaveAddrs(j)) & _
-                                            " master=" & ShortLogText(mAddr) & _
-                                            " " & ErrText()
-                        Err.Clear
-                        On Error GoTo 0
-                        GoTo lblNextSlave
-                    End If
-                    On Error GoTo 0
-                    If slvRng.Row < minRow Then minRow = slvRng.Row
-                    If slvRng.Row > maxRow Then maxRow = slvRng.Row
-                    If slvRng.Column < minCol Then minCol = slvRng.Column
-                    If slvRng.Column > maxCol Then maxCol = slvRng.Column
+                    slvRow = AddrRowNum(slaveAddrs(j))
+                    slvCol = AddrColNum(slaveAddrs(j))
+                    If slvRow < minRow Then minRow = slvRow
+                    If slvRow > maxRow Then maxRow = slvRow
+                    If slvCol < minCol Then minCol = slvCol
+                    If slvCol > maxCol Then maxCol = slvCol
                     processed(j) = True
                 End If
-lblNextSlave:
             Next j
 
             On Error Resume Next
             Err.Clear
-            ws.Range(ws.Cells(minRow, minCol), ws.Cells(maxRow, maxCol)).Merge
+            ws.Range(CellAddrStr(minRow, minCol) & ":" & CellAddrStr(maxRow, maxCol)).Merge
             If Err.Number <> 0 Then
                 LogImportDiagnostic "ERROR sheet=" & ws.codeName & _
-                                    " merge failed range=" & _
-                                    ws.Range(ws.Cells(minRow, minCol), ws.Cells(maxRow, maxCol)).Address(False, False) & _
-                                    " " & ErrText()
+                                    " merge failed range=" & CellAddrStr(minRow, minCol) & _
+                                    ":" & CellAddrStr(maxRow, maxCol) & " " & ErrText()
                 Err.Clear
             End If
             On Error GoTo 0
@@ -2657,4 +2644,16 @@ Private Function AddrColNum(addr As String) As Long
         n = n * 26 + (c - 64)
     Next i
     AddrColNum = n
+End Function
+
+Private Function CellAddrStr(r As Long, c As Long) As String
+    ' Inverse of AddrRowNum/AddrColNum: (1,1)->"A1", (54,30)->"AD54"
+    Dim col As String
+    Dim n As Long
+    n = c
+    Do While n > 0
+        col = Chr(64 + ((n - 1) Mod 26 + 1)) & col
+        n = (n - 1) \ 26
+    Loop
+    CellAddrStr = col & CStr(r)
 End Function
