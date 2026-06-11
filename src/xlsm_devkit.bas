@@ -48,6 +48,28 @@ Private Type DevkitStringBuilder
     Capacity As Long
 End Type
 
+Private Type ImportSettings
+    ImportValue      As Boolean
+    ImportFormula    As Boolean
+    ImportNamedRange As Boolean
+    ImportNumFmt     As Boolean
+    ImportUnlocked   As Boolean
+    ImportList       As Boolean
+    ImportBG         As Boolean
+    ImportFG         As Boolean
+    ImportFontSize   As Boolean
+    ImportBold       As Boolean
+    ImportItalic     As Boolean
+    ImportStrike     As Boolean
+    ImportWrap       As Boolean
+    ImportHAlign     As Boolean
+    ImportVAlign     As Boolean
+    ImportMerge      As Boolean
+    ImportHiddenRows As Boolean
+    ImportHiddenCols As Boolean
+    ImportShapes     As Boolean
+End Type
+
 Public Sub CallInitDevMode()
     InitDevMode
 End Sub
@@ -569,6 +591,8 @@ Sub ImportAllSheetMapsFromMD(Optional skipConfirm As Boolean = False)
         GoTo lblFin
     End If
     Set syncCache = LoadSheetSyncCache(sheetFolderPath, fso)
+    Dim cfg As ImportSettings
+    cfg = LoadImportSettings(ThisWorkbook.Path & "\")
     StartImportDiagnosticLog sheetFolderPath
     LogImportDiagnostic "ImportAllSheetMapsFromMD start workbook=" & ThisWorkbook.FullName
     If AbortIfProtectedImportSheets(sheetFolderPath, fso, "ImportAllSheetMapsFromMD") Then
@@ -597,7 +621,7 @@ Sub ImportAllSheetMapsFromMD(Optional skipConfirm As Boolean = False)
                                     " file=" & fileName & _
                                     " bytes=" & fi.Size
                 mdContent = ReadUTF8(fileName)
-                ApplySheetMapMarkdown ws, mdContent
+                ApplySheetMapMarkdown ws, mdContent, cfg
                 LogImportDiagnostic "Sheet import done codeName=" & ws.codeName & _
                                     " name=" & ws.Name
                 syncCache(cacheKey) = cacheVal
@@ -704,6 +728,86 @@ Private Sub SaveSheetSyncCache(sheetFolderPath As String, cache As Object, fso A
     ts.Close
     On Error GoTo 0
 End Sub
+
+Private Function LoadImportSettings(wbFolder As String) As ImportSettings
+    Dim cfg As ImportSettings
+    cfg.ImportValue      = True
+    cfg.ImportFormula    = True
+    cfg.ImportNamedRange = True
+    cfg.ImportNumFmt     = True
+    cfg.ImportUnlocked   = True
+    cfg.ImportList       = True
+    cfg.ImportBG         = True
+    cfg.ImportFG         = True
+    cfg.ImportFontSize   = True
+    cfg.ImportBold       = True
+    cfg.ImportItalic     = True
+    cfg.ImportStrike     = True
+    cfg.ImportWrap       = True
+    cfg.ImportHAlign     = True
+    cfg.ImportVAlign     = True
+    cfg.ImportMerge      = True
+    cfg.ImportHiddenRows = True
+    cfg.ImportHiddenCols = True
+    cfg.ImportShapes     = True
+
+    Dim cfgPath As String
+    cfgPath = wbFolder & "xlsm_devkit.ini"
+    Dim fso As Object
+    Set fso = CreateObject("Scripting.FileSystemObject")
+    If Not fso.FileExists(cfgPath) Then
+        LoadImportSettings = cfg
+        Exit Function
+    End If
+
+    Dim ts As Object
+    Set ts = fso.OpenTextFile(cfgPath, 1, False)
+    Dim inImport As Boolean
+    inImport = False
+    Do While Not ts.AtEndOfStream
+        Dim ln As String
+        ln = Trim(ts.ReadLine)
+        If LCase(ln) = "[import]" Then
+            inImport = True
+        ElseIf Left(ln, 1) = "[" Then
+            inImport = False
+        ElseIf inImport And Left(ln, 1) <> ";" And Left(ln, 1) <> "#" Then
+            Dim eq As Long
+            eq = InStr(ln, "=")
+            If eq > 0 Then
+                Dim k As String
+                Dim v As String
+                k = LCase(Trim(Left(ln, eq - 1)))
+                v = LCase(Trim(Mid(ln, eq + 1)))
+                Dim bv As Boolean
+                bv = (v = "1" Or v = "true")
+                Select Case k
+                    Case "value":       cfg.ImportValue      = bv
+                    Case "formula":     cfg.ImportFormula    = bv
+                    Case "named_range": cfg.ImportNamedRange = bv
+                    Case "numfmt":      cfg.ImportNumFmt     = bv
+                    Case "unlocked":    cfg.ImportUnlocked   = bv
+                    Case "list":        cfg.ImportList       = bv
+                    Case "bg":          cfg.ImportBG         = bv
+                    Case "fg":          cfg.ImportFG         = bv
+                    Case "font_size":   cfg.ImportFontSize   = bv
+                    Case "bold":        cfg.ImportBold       = bv
+                    Case "italic":      cfg.ImportItalic     = bv
+                    Case "strike":      cfg.ImportStrike     = bv
+                    Case "wrap":        cfg.ImportWrap       = bv
+                    Case "halign":      cfg.ImportHAlign     = bv
+                    Case "valign":      cfg.ImportVAlign     = bv
+                    Case "merge":       cfg.ImportMerge      = bv
+                    Case "hidden_rows": cfg.ImportHiddenRows = bv
+                    Case "hidden_cols": cfg.ImportHiddenCols = bv
+                    Case "shapes":      cfg.ImportShapes     = bv
+                End Select
+            End If
+        End If
+    Loop
+    ts.Close
+    LoadImportSettings = cfg
+End Function
 
 Private Function ShortLogText(text As String, Optional maxLen As Long = 240) As String
     Dim s As String
@@ -958,7 +1062,7 @@ lblFinShp:
     GenerateSheetMapMarkdown = StringBuilderToString(mapText)
 End Function
 
-Private Sub ApplySheetMapMarkdown(ws As Worksheet, mdContent As String)
+Private Sub ApplySheetMapMarkdown(ws As Worksheet, mdContent As String, cfg As ImportSettings)
     Dim normContent As String
     Dim lines() As String
     Dim i As Long
@@ -1030,13 +1134,14 @@ Private Sub ApplySheetMapMarkdown(ws As Worksheet, mdContent As String)
         End If
     Next j
 
-    ' Unmerge all (required for Pass 2 merge reconstruction)
-    On Error Resume Next
-    Err.Clear
-    ws.Cells.UnMerge
-    If Err.Number <> 0 Then LogImportDiagnostic "WARN sheet=" & ws.codeName & " unmerge failed " & ErrText()
-    On Error GoTo 0
-    DoEvents
+    If cfg.ImportMerge Then
+        On Error Resume Next
+        Err.Clear
+        ws.Cells.UnMerge
+        If Err.Number <> 0 Then LogImportDiagnostic "WARN sheet=" & ws.codeName & " unmerge failed " & ErrText()
+        On Error GoTo 0
+        DoEvents
+    End If
 
     ' Cleanup: clear the entire Markdown bounding box in 3 batch operations.
     ' Previous cell-by-cell Union approach caused O(n^2) slowdown and COM disconnects
@@ -1046,8 +1151,8 @@ Private Sub ApplySheetMapMarkdown(ws As Worksheet, mdContent As String)
         Set cleanBBox = ws.Range(ws.Cells(1, 1), ws.Cells(mdMaxRow, mdMaxCol))
         On Error Resume Next
         cleanBBox.ClearContents
-        cleanBBox.ClearFormats
-        cleanBBox.Validation.Delete
+        If cfg.ImportMerge Then cleanBBox.ClearFormats
+        If cfg.ImportList Then cleanBBox.Validation.Delete
         On Error GoTo 0
     End If
 
@@ -1097,7 +1202,7 @@ Private Sub ApplySheetMapMarkdown(ws As Worksheet, mdContent As String)
                     masterAddrs(slaveCount) = mAddr
                     slaveCount = slaveCount + 1
                     mergeRows = mergeRows + 1
-                    If cName <> "-" Then
+                    If cName <> "-" And cfg.ImportNamedRange Then
                         Set rng = Nothing
                         On Error Resume Next
                         Set rng = ws.Range(addr)
@@ -1122,46 +1227,50 @@ Private Sub ApplySheetMapMarkdown(ws As Worksheet, mdContent As String)
 
                     If Not rng Is Nothing Then
                         If cFormula <> "-" And cFormula <> "" Then
-                            fml = cFormula
-                            If Left(fml, 1) = "`" And Right(fml, 1) = "`" Then
-                                fml = Mid(fml, 2, Len(fml) - 2)
-                            End If
-                            fml = UnescapeCellValue(fml)
-                            On Error Resume Next
-                            Err.Clear
-                            rng.Formula = fml
-                            If Err.Number <> 0 Then
-                                LogImportDiagnostic "ERROR sheet=" & ws.codeName & _
-                                                    " mdLine=" & (i + 1) & _
-                                                    " addr=" & addr & _
-                                                    " set formula failed " & ErrText() & _
-                                                    " formula=" & ShortLogText(fml)
+                            If cfg.ImportFormula Then
+                                fml = cFormula
+                                If Left(fml, 1) = "`" And Right(fml, 1) = "`" Then
+                                    fml = Mid(fml, 2, Len(fml) - 2)
+                                End If
+                                fml = UnescapeCellValue(fml)
+                                On Error Resume Next
                                 Err.Clear
-                            Else
-                                formulaApplied = formulaApplied + 1
+                                rng.Formula = fml
+                                If Err.Number <> 0 Then
+                                    LogImportDiagnostic "ERROR sheet=" & ws.codeName & _
+                                                        " mdLine=" & (i + 1) & _
+                                                        " addr=" & addr & _
+                                                        " set formula failed " & ErrText() & _
+                                                        " formula=" & ShortLogText(fml)
+                                    Err.Clear
+                                Else
+                                    formulaApplied = formulaApplied + 1
+                                End If
+                                On Error GoTo 0
                             End If
-                            On Error GoTo 0
                         ElseIf cValue <> "-" And cValue <> "" Then
-                            On Error Resume Next
-                            Err.Clear
-                            unescapedValue = UnescapeCellValue(cValue)
-                            rng.Value = unescapedValue
-                            If Err.Number <> 0 Then
-                                LogImportDiagnostic "ERROR sheet=" & ws.codeName & _
-                                                    " mdLine=" & (i + 1) & _
-                                                    " addr=" & addr & _
-                                                    " set value failed " & ErrText() & _
-                                                    " value=" & ShortLogText(unescapedValue)
+                            If cfg.ImportValue Then
+                                On Error Resume Next
                                 Err.Clear
-                            Else
-                                valueApplied = valueApplied + 1
+                                unescapedValue = UnescapeCellValue(cValue)
+                                rng.Value = unescapedValue
+                                If Err.Number <> 0 Then
+                                    LogImportDiagnostic "ERROR sheet=" & ws.codeName & _
+                                                        " mdLine=" & (i + 1) & _
+                                                        " addr=" & addr & _
+                                                        " set value failed " & ErrText() & _
+                                                        " value=" & ShortLogText(unescapedValue)
+                                    Err.Clear
+                                Else
+                                    valueApplied = valueApplied + 1
+                                End If
+                                On Error GoTo 0
                             End If
-                            On Error GoTo 0
                         Else
                             blankOrStyleRows = blankOrStyleRows + 1
                         End If
-                        ApplyCellStyle rng, cStyle
-                        If cName <> "-" Then ApplyCellName ws, rng, cName
+                        ApplyCellStyle rng, cStyle, cfg
+                        If cName <> "-" And cfg.ImportNamedRange Then ApplyCellName ws, rng, cName
                     ElseIf Err.Number = 0 Then
                         LogImportDiagnostic "ERROR sheet=" & ws.codeName & _
                                             " mdLine=" & (i + 1) & _
@@ -1180,11 +1289,11 @@ Private Sub ApplySheetMapMarkdown(ws As Worksheet, mdContent As String)
     Next i
 
     ' Pass 2: reconstruct merged ranges
-    If slaveCount > 0 Then ReconstructMerges ws, slaveAddrs, masterAddrs, slaveCount
+    If slaveCount > 0 And cfg.ImportMerge Then ReconstructMerges ws, slaveAddrs, masterAddrs, slaveCount
 
-    If Len(hiddenRowsStr) > 0 Then ApplyHiddenRows ws, hiddenRowsStr
-    If Len(hiddenColsStr) > 0 Then ApplyHiddenCols ws, hiddenColsStr
-    ApplyShapeMapMarkdown ws, lines
+    If Len(hiddenRowsStr) > 0 And cfg.ImportHiddenRows Then ApplyHiddenRows ws, hiddenRowsStr
+    If Len(hiddenColsStr) > 0 And cfg.ImportHiddenCols Then ApplyHiddenCols ws, hiddenColsStr
+    If cfg.ImportShapes Then ApplyShapeMapMarkdown ws, lines
     LogImportDiagnostic "ApplySheetMapMarkdown summary sheet=" & ws.codeName & _
                         " parsed=" & parsedRows & _
                         " formulas=" & formulaApplied & _
@@ -1844,7 +1953,7 @@ Private Function HexToRGB(hexStr As String) As Long
     HexToRGB = RGB(CLng("&H" & Left(hexStr, 2)), CLng("&H" & Mid(hexStr, 3, 2)), CLng("&H" & Right(hexStr, 2)))
 End Function
 
-Private Sub ApplyCellStyle(rng As Range, styleStr As String)
+Private Sub ApplyCellStyle(rng As Range, styleStr As String, cfg As ImportSettings)
     If styleStr = "-" Or styleStr = "" Then Exit Sub
     Dim parts() As String
     Dim p As String
@@ -1869,7 +1978,7 @@ Private Sub ApplyCellStyle(rng As Range, styleStr As String)
             tokenValue = ""
         End If
 
-        If tokenName = "BG" And sep > 0 Then
+        If tokenName = "BG" And sep > 0 And cfg.ImportBG Then
             On Error Resume Next
             Err.Clear
             rng.Interior.Color = HexToRGB(tokenValue)
@@ -1881,7 +1990,7 @@ Private Sub ApplyCellStyle(rng As Range, styleStr As String)
                 Err.Clear
             End If
             On Error GoTo 0
-        ElseIf tokenName = "FG" And sep > 0 Then
+        ElseIf tokenName = "FG" And sep > 0 And cfg.ImportFG Then
             On Error Resume Next
             Err.Clear
             rng.Font.Color = HexToRGB(tokenValue)
@@ -1893,7 +2002,7 @@ Private Sub ApplyCellStyle(rng As Range, styleStr As String)
                 Err.Clear
             End If
             On Error GoTo 0
-        ElseIf tokenName = "FONTSIZE" And sep > 0 Then
+        ElseIf tokenName = "FONTSIZE" And sep > 0 And cfg.ImportFontSize Then
             On Error Resume Next
             Err.Clear
             rng.Font.Size = CDbl(tokenValue)
@@ -1905,7 +2014,7 @@ Private Sub ApplyCellStyle(rng As Range, styleStr As String)
                 Err.Clear
             End If
             On Error GoTo 0
-        ElseIf tokenName = "NUMFMT" And sep > 0 Then
+        ElseIf tokenName = "NUMFMT" And sep > 0 And cfg.ImportNumFmt Then
             On Error Resume Next
             Err.Clear
             rng.NumberFormat = tokenValue
@@ -1917,17 +2026,17 @@ Private Sub ApplyCellStyle(rng As Range, styleStr As String)
                 Err.Clear
             End If
             On Error GoTo 0
-        ElseIf tokenName = "BOLD" Then
+        ElseIf tokenName = "BOLD" And cfg.ImportBold Then
             If StyleFlagEnabled(tokenValueRaw, sep > 0) Then rng.Font.Bold = True
-        ElseIf tokenName = "ITALIC" Then
+        ElseIf tokenName = "ITALIC" And cfg.ImportItalic Then
             If StyleFlagEnabled(tokenValueRaw, sep > 0) Then rng.Font.Italic = True
-        ElseIf tokenName = "STRIKE" Then
+        ElseIf tokenName = "STRIKE" And cfg.ImportStrike Then
             If StyleFlagEnabled(tokenValueRaw, sep > 0) Then rng.Font.Strikethrough = True
-        ElseIf tokenName = "WRAP" Then
+        ElseIf tokenName = "WRAP" And cfg.ImportWrap Then
             If StyleFlagEnabled(tokenValueRaw, sep > 0) Then rng.WrapText = True
-        ElseIf tokenName = "UNLOCKED" Then
+        ElseIf tokenName = "UNLOCKED" And cfg.ImportUnlocked Then
             If StyleFlagEnabled(tokenValueRaw, sep > 0) Then rng.Locked = False
-        ElseIf tokenName = "HALIGN" And sep > 0 Then
+        ElseIf tokenName = "HALIGN" And sep > 0 And cfg.ImportHAlign Then
             On Error Resume Next
             Err.Clear
             rng.HorizontalAlignment = TextToHorizontalAlignment(tokenValue)
@@ -1939,7 +2048,7 @@ Private Sub ApplyCellStyle(rng As Range, styleStr As String)
                 Err.Clear
             End If
             On Error GoTo 0
-        ElseIf tokenName = "VALIGN" And sep > 0 Then
+        ElseIf tokenName = "VALIGN" And sep > 0 And cfg.ImportVAlign Then
             On Error Resume Next
             Err.Clear
             rng.VerticalAlignment = TextToVerticalAlignment(tokenValue)
@@ -1951,7 +2060,7 @@ Private Sub ApplyCellStyle(rng As Range, styleStr As String)
                 Err.Clear
             End If
             On Error GoTo 0
-        ElseIf tokenName = "LIST" And sep > 0 Then
+        ElseIf tokenName = "LIST" And sep > 0 And cfg.ImportList Then
             Dim listFml As String
             listFml = tokenValue
             On Error Resume Next
