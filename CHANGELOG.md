@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-06-11
+
+### Added
+- Import progress: `Application.StatusBar` shows "Importing sheet map N/N: `<sheet>`" during `ImportAllSheetMapsFromMD`; status bar is saved and restored even if an error occurs mid-import.
+
+### Fixed
+- `ApplySheetMapMarkdown` no longer freezes or disconnects COM on sheets with large merged regions. Two root causes were eliminated:
+  1. The per-cell cleanup loop built an `Application.Union` object incrementally, causing O(n^2) slowdown and eventual COM disconnect (`RPC_E_DISCONNECTED`) on sheets with many cells outside the Markdown.
+  2. `ApplyCellStyle` was called for every merge slave cell individually (~350+ calls on large sheets), even though slave styles are irrelevant after `ReconstructMerges` (master style propagates to the whole merged region).
+- Cleanup is now 3 batch operations on the Markdown bounding box (`ClearContents` / `ClearFormats` / `Validation.Delete`). Merge slaves are recorded for Pass 2 only, with no per-cell style application.
+- Pass 0 bounding box calculation no longer makes COM calls (`ws.Range(addr)` per address); replaced with pure string parsing helpers `AddrRowNum` / `AddrColNum`.
+
 ## [1.7.0] - 2026-06-11
 
 ### Added

@@ -908,16 +908,17 @@ Private Sub ApplySheetMapMarkdown(ws As Worksheet, mdContent As String)
     Dim valueApplied As Long
     Dim blankOrStyleRows As Long
     Dim mergeRows As Long
-    Dim skippedRows As Long
-    Dim mdAddrs As Object
     Dim j As Long
     Dim passLine As String
     Dim passCols() As String
     Dim passAddr As String
-    Dim cleanupCell As Range
-    Dim currentRow As String
+    Dim mdMaxRow As Long
+    Dim mdMaxCol As Long
+    Dim cleanBBox As Range
     hiddenRowsStr = ""
     hiddenColsStr = ""
+    mdMaxRow = 0
+    mdMaxCol = 0
 
     ' Normalize line endings and split
     normContent = Replace(mdContent, vbCrLf, vbLf)
@@ -927,8 +928,10 @@ Private Sub ApplySheetMapMarkdown(ws As Worksheet, mdContent As String)
                         " name=" & ws.Name & _
                         " lineCount=" & (UBound(lines) + 1)
 
-    ' Pass 0: collect address set from Markdown for incremental cleanup
-    Set mdAddrs = CreateObject("Scripting.Dictionary")
+    ' Pass 0: compute Markdown bounding box (max row/col) using pure string parsing
+    ' to avoid COM calls.  No address dictionary needed -- cleanup now clears the
+    ' entire bounding box instead of building a cell-by-cell Union.
+    Dim pRow As Long, pCol As Long
     For j = 0 To UBound(lines)
         passLine = Trim(lines(j))
         If passLine = "## Shapes" Then Exit For
@@ -937,7 +940,12 @@ Private Sub ApplySheetMapMarkdown(ws As Worksheet, mdContent As String)
             passCols = ParseMDTableRow(passLine)
             If UBound(passCols) >= 4 Then
                 passAddr = Trim(passCols(0))
-                If passAddr <> "" Then mdAddrs(passAddr) = True
+                If passAddr <> "" And passAddr <> "-" Then
+                    pRow = AddrRowNum(passAddr)
+                    pCol = AddrColNum(passAddr)
+                    If pRow > mdMaxRow Then mdMaxRow = pRow
+                    If pCol > mdMaxCol Then mdMaxCol = pCol
+                End If
             End If
         End If
     Next j
@@ -949,16 +957,18 @@ Private Sub ApplySheetMapMarkdown(ws As Worksheet, mdContent As String)
     If Err.Number <> 0 Then LogImportDiagnostic "WARN sheet=" & ws.codeName & " unmerge failed " & ErrText()
     On Error GoTo 0
 
-    ' Cleanup: clear cells in UsedRange that are not in the Markdown
-    On Error Resume Next
-    For Each cleanupCell In ws.UsedRange
-        If Not mdAddrs.Exists(cleanupCell.Address(False, False)) Then
-            cleanupCell.ClearContents
-            cleanupCell.ClearFormats
-            cleanupCell.Validation.Delete
-        End If
-    Next cleanupCell
-    On Error GoTo 0
+    ' Cleanup: clear the entire Markdown bounding box in 3 batch operations.
+    ' Previous cell-by-cell Union approach caused O(n^2) slowdown and COM disconnects
+    ' on sheets with large merged regions.  Pass 1 re-applies all Markdown cells so
+    ' extra cells within the box are wiped and in-box Markdown cells are rewritten.
+    If mdMaxRow > 0 And mdMaxCol > 0 Then
+        Set cleanBBox = ws.Range(ws.Cells(1, 1), ws.Cells(mdMaxRow, mdMaxCol))
+        On Error Resume Next
+        cleanBBox.ClearContents
+        cleanBBox.ClearFormats
+        cleanBBox.Validation.Delete
+        On Error GoTo 0
+    End If
 
     inCellTable = False
     slaveCount = 0
@@ -1006,8 +1016,8 @@ Private Sub ApplySheetMapMarkdown(ws As Worksheet, mdContent As String)
 
                 If Not rng Is Nothing Then
                     If cValue = "!merged_left" Or cValue = "!merged_up" Or cValue = "!merged_ul" Then
-                        ' Slave cell: apply style and name, record for Pass 2
-                        ApplyCellStyle rng, cStyle
+                        ' Slave cell: record for Pass 2 only.  No style needed -- bounding
+                        ' box was already cleared and master style propagates after re-merge.
                         If cName <> "-" Then ApplyCellName ws, rng, cName
                         mergeRows = mergeRows + 1
 
@@ -1023,14 +1033,7 @@ Private Sub ApplySheetMapMarkdown(ws As Worksheet, mdContent As String)
                         masterAddrs(slaveCount) = mAddr
                         slaveCount = slaveCount + 1
                     Else
-                        ' Normal or master cell: skip if current state matches Markdown
-                        currentRow = RenderCellRow(rng)
-                        If currentRow = line Then
-                            skippedRows = skippedRows + 1
-                            GoTo NextRow
-                        End If
-                        rng.ClearFormats
-                        rng.Validation.Delete
+                        ' Normal or master cell: bounding box already cleared, apply directly.
                         If cFormula <> "-" And cFormula <> "" Then
                             fml = cFormula
                             If Left(fml, 1) = "`" And Right(fml, 1) = "`" Then
@@ -1087,7 +1090,6 @@ Private Sub ApplySheetMapMarkdown(ws As Worksheet, mdContent As String)
                                     " line=" & ShortLogText(line)
             End If
         End If
-NextRow:
     Next i
 
     ' Pass 2: reconstruct merged ranges
@@ -1098,7 +1100,6 @@ NextRow:
     ApplyShapeMapMarkdown ws, lines
     LogImportDiagnostic "ApplySheetMapMarkdown summary sheet=" & ws.codeName & _
                         " parsed=" & parsedRows & _
-                        " skipped=" & skippedRows & _
                         " formulas=" & formulaApplied & _
                         " values=" & valueApplied & _
                         " blankOrStyle=" & blankOrStyleRows & _
@@ -2631,4 +2632,29 @@ Private Function IsDevkitComponent(compName As String) As Boolean
     Dim lowerName As String
     lowerName = LCase(compName)
     IsDevkitComponent = (lowerName = LCase(MODULE_NAME)) Or (Left(lowerName, 7) = "devkit_")
+End Function
+
+' Pure string-parsing helpers -- no COM calls, used to compute the Markdown
+' bounding box in Pass 0 without touching the worksheet object model.
+
+Private Function AddrRowNum(addr As String) As Long
+    ' "A1" -> 1, "J52" -> 52, "AA100" -> 100
+    Dim i As Long
+    For i = Len(addr) To 1 Step -1
+        If Mid(addr, i, 1) < "0" Or Mid(addr, i, 1) > "9" Then
+            AddrRowNum = CLng(Mid(addr, i + 1))
+            Exit Function
+        End If
+    Next i
+End Function
+
+Private Function AddrColNum(addr As String) As Long
+    ' "A1" -> 1, "J1" -> 10, "AA1" -> 27, "Y59" -> 25
+    Dim i As Long, n As Long, c As Long
+    For i = 1 To Len(addr)
+        c = Asc(UCase(Mid(addr, i, 1)))
+        If c < 65 Or c > 90 Then Exit For
+        n = n * 26 + (c - 64)
+    Next i
+    AddrColNum = n
 End Function

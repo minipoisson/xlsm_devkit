@@ -9,3 +9,4 @@ src/*.log
 sheet/
 SESSION_BOOTSTRAP.md
 .continue/
+*.log
