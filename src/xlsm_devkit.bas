@@ -31,6 +31,7 @@ Private Const MODULE_NAME As String = "xlsm_devkit"
 Private Const SKIP_DEVKIT_MODULES As Boolean = True
 Private Const IMPORT_DIAGNOSTICS_ENABLED As Boolean = False
 Private Const STRING_BUILDER_CHUNK_SIZE As Long = 1000
+Private Const SYNC_CACHE_FILE As String = "xlsm_devkit_sync.tsv"
 
 ' NOTE: This module itself is NOT imported by ImportAllComponents()
 ' because a module cannot delete or overwrite itself.
@@ -664,8 +665,6 @@ Private Function ErrText() As String
     ErrText = "Err " & Err.Number & ": " & Err.Description
 End Function
 
-Private Const SYNC_CACHE_FILE As String = "xlsm_devkit_sync.tsv"
-
 Private Function LoadSheetSyncCache(sheetFolderPath As String, fso As Object) As Object
     Dim cache As Object
     Set cache = CreateObject("Scripting.Dictionary")
@@ -1263,7 +1262,16 @@ Private Sub ApplyShapeMapMarkdown(ws As Worksheet, lines() As String)
                     updatedCount = updatedCount + 1
                 End If
 
+                On Error Resume Next
                 ApplyShapeFields ws, shp, i + 1, shpLabel, shpFormula, shpOnAction, shpStyle
+                If Err.Number <> 0 Then
+                    LogImportDiagnostic "ERROR sheet=" & ws.codeName & _
+                                        " mdLine=" & (i + 1) & _
+                                        " ApplyShapeFields failed name=" & ShortLogText(shpName) & _
+                                        " " & ErrText()
+                    Err.Clear
+                End If
+                On Error GoTo 0
             Else
                 malformedCount = malformedCount + 1
                 LogImportDiagnostic "ERROR sheet=" & ws.codeName & _
@@ -1331,8 +1339,13 @@ Private Sub ApplyShapeFields(ws As Worksheet, shp As Object, mdLine As Long, _
                              shpLabel As String, shpFormula As String, _
                              shpOnAction As String, shpStyle As String)
     Dim fml As String
+    Dim hasTextFrm As Boolean
 
-    If shp.HasTextFrame Then
+    On Error Resume Next
+    hasTextFrm = shp.HasTextFrame
+    On Error GoTo 0
+
+    If hasTextFrm Then
         On Error Resume Next
         Err.Clear
         If shpLabel = "-" Then
