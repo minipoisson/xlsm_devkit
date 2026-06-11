@@ -463,6 +463,16 @@ Sub ExportAllSheetMapsToMD(Optional skipConfirm As Boolean = False)
         If MsgBox(t("msg.export_sheets_confirm", "Export all sheet maps to sheet/?"), vbYesNo + vbDefaultButton2) = vbNo Then Exit Sub
     End If
 
+    Dim preScreenUpdate As Boolean
+    preScreenUpdate = Application.ScreenUpdating
+    Application.ScreenUpdating = False
+    Dim preCalcMode As XlCalculation
+    preCalcMode = Application.Calculation
+    Application.Calculation = xlCalculationManual
+    Dim preEvents As Boolean
+    preEvents = Application.EnableEvents
+    Application.EnableEvents = False
+
     Dim oldStatusBar As Variant
     Dim oldDisplayStatusBar As Boolean
     oldStatusBar = Application.StatusBar
@@ -475,6 +485,7 @@ Sub ExportAllSheetMapsToMD(Optional skipConfirm As Boolean = False)
     Dim mdContent As String
     Dim sheetIndex As Long
     Dim sheetCount As Long
+    Dim syncCache As Object
 
     On Error GoTo lblErr
     sheetFolderPath = ThisWorkbook.Path & "\sheet"
@@ -483,6 +494,7 @@ Sub ExportAllSheetMapsToMD(Optional skipConfirm As Boolean = False)
     If Not fso.FolderExists(sheetFolderPath) Then
         fso.CreateFolder sheetFolderPath
     End If
+    Set syncCache = LoadSheetSyncCache(sheetFolderPath, fso)
 
     sheetCount = ThisWorkbook.Worksheets.Count
     For Each ws In ThisWorkbook.Worksheets
@@ -490,12 +502,17 @@ Sub ExportAllSheetMapsToMD(Optional skipConfirm As Boolean = False)
         Application.StatusBar = Fmt(t("status.export_sheet_map", "Exporting sheet map {0}/{1}: {2}"), _
                                     sheetIndex, sheetCount, ws.Name)
         mdContent = GenerateSheetMapMarkdown(ws)
-        
+
         fileName = sheetFolderPath & "\" & ws.codeName & ".md"
-        
+
         SaveAsUTF8 fileName, mdContent
+        Dim fi As Object
+        Set fi = fso.GetFile(fileName)
+        syncCache(ws.codeName & ".md") = CStr(fi.Size) & vbTab & _
+                                         Format(fi.DateLastModified, "yyyy-mm-dd hh:nn:ss")
     Next
-    
+
+    SaveSheetSyncCache sheetFolderPath, syncCache, fso
     MsgBox Fmt(t("msg.sheet_maps_exported", "All sheet maps exported. Saved to: {0}"), sheetFolderPath), vbInformation
     GoTo lblFin
 
@@ -507,6 +524,9 @@ lblFin:
     On Error Resume Next
     Application.StatusBar = oldStatusBar
     Application.DisplayStatusBar = oldDisplayStatusBar
+    Application.ScreenUpdating = preScreenUpdate
+    Application.Calculation = preCalcMode
+    Application.EnableEvents = preEvents
     On Error GoTo 0
 End Sub
 
@@ -537,6 +557,7 @@ Sub ImportAllSheetMapsFromMD(Optional skipConfirm As Boolean = False)
     Dim mdContent As String
     Dim sheetIndex As Long
     Dim sheetCount As Long
+    Dim syncCache As Object
 
     On Error GoTo lblErr
     sheetFolderPath = ThisWorkbook.Path & "\sheet"
@@ -546,6 +567,7 @@ Sub ImportAllSheetMapsFromMD(Optional skipConfirm As Boolean = False)
         MsgBox Fmt(t("msg.sheet_not_found", "Sheet folder not found: {0}"), sheetFolderPath), vbExclamation
         GoTo lblFin
     End If
+    Set syncCache = LoadSheetSyncCache(sheetFolderPath, fso)
     StartImportDiagnosticLog sheetFolderPath
     LogImportDiagnostic "ImportAllSheetMapsFromMD start workbook=" & ThisWorkbook.FullName
     If AbortIfProtectedImportSheets(sheetFolderPath, fso, "ImportAllSheetMapsFromMD") Then
@@ -559,14 +581,26 @@ Sub ImportAllSheetMapsFromMD(Optional skipConfirm As Boolean = False)
                                     sheetIndex, sheetCount, ws.Name)
         fileName = sheetFolderPath & "\" & ws.codeName & ".md"
         If fso.FileExists(fileName) Then
-            LogImportDiagnostic "Sheet import start codeName=" & ws.codeName & _
-                                " name=" & ws.Name & _
-                                " file=" & fileName & _
-                                " bytes=" & fso.GetFile(fileName).Size
-            mdContent = ReadUTF8(fileName)
-            ApplySheetMapMarkdown ws, mdContent
-            LogImportDiagnostic "Sheet import done codeName=" & ws.codeName & _
-                                " name=" & ws.Name
+            Dim fi As Object
+            Set fi = fso.GetFile(fileName)
+            Dim cacheKey As String
+            cacheKey = ws.codeName & ".md"
+            Dim cacheVal As String
+            cacheVal = CStr(fi.Size) & vbTab & Format(fi.DateLastModified, "yyyy-mm-dd hh:nn:ss")
+            If syncCache.Exists(cacheKey) And syncCache(cacheKey) = cacheVal Then
+                LogImportDiagnostic "Sheet import skipped (unchanged) codeName=" & ws.codeName & _
+                                    " name=" & ws.Name
+            Else
+                LogImportDiagnostic "Sheet import start codeName=" & ws.codeName & _
+                                    " name=" & ws.Name & _
+                                    " file=" & fileName & _
+                                    " bytes=" & fi.Size
+                mdContent = ReadUTF8(fileName)
+                ApplySheetMapMarkdown ws, mdContent
+                LogImportDiagnostic "Sheet import done codeName=" & ws.codeName & _
+                                    " name=" & ws.Name
+                syncCache(cacheKey) = cacheVal
+            End If
         Else
             LogImportDiagnostic "Sheet import skipped missing file codeName=" & ws.codeName & _
                                 " name=" & ws.Name & _
@@ -574,11 +608,15 @@ Sub ImportAllSheetMapsFromMD(Optional skipConfirm As Boolean = False)
         End If
     Next ws
 
+    SaveSheetSyncCache sheetFolderPath, syncCache, fso
     LogImportDiagnostic "ImportAllSheetMapsFromMD done"
     MsgBox t("msg.sheet_maps_imported", "All sheet maps imported."), vbInformation
     GoTo lblFin
 lblErr:
     LogImportDiagnostic "ImportAllSheetMapsFromMD ERROR " & ErrText()
+    On Error Resume Next
+    SaveSheetSyncCache sheetFolderPath, syncCache, fso
+    On Error GoTo 0
     MsgBox t("msg.sheet_map_import_error", _
     "Error importing sheet maps. Some sheets may be partially updated.") _
     & vbCrLf & Err.Description, vbExclamation
@@ -625,6 +663,48 @@ End Sub
 Private Function ErrText() As String
     ErrText = "Err " & Err.Number & ": " & Err.Description
 End Function
+
+Private Const SYNC_CACHE_FILE As String = "xlsm_devkit_sync.tsv"
+
+Private Function LoadSheetSyncCache(sheetFolderPath As String, fso As Object) As Object
+    Dim cache As Object
+    Set cache = CreateObject("Scripting.Dictionary")
+    Dim cacheFile As String
+    cacheFile = sheetFolderPath & "\" & SYNC_CACHE_FILE
+    If Not fso.FileExists(cacheFile) Then
+        Set LoadSheetSyncCache = cache
+        Exit Function
+    End If
+    On Error Resume Next
+    Dim ts As Object
+    Set ts = fso.OpenTextFile(cacheFile, 1)
+    Do While Not ts.AtEndOfStream
+        Dim parts() As String
+        parts = Split(ts.ReadLine, vbTab)
+        If UBound(parts) = 2 Then
+            cache(parts(0)) = parts(1) & vbTab & parts(2)
+        End If
+    Loop
+    ts.Close
+    On Error GoTo 0
+    Set LoadSheetSyncCache = cache
+End Function
+
+Private Sub SaveSheetSyncCache(sheetFolderPath As String, cache As Object, fso As Object)
+    If cache Is Nothing Then Exit Sub
+    Dim cacheFile As String
+    cacheFile = sheetFolderPath & "\" & SYNC_CACHE_FILE
+    On Error Resume Next
+    Dim ts As Object
+    Set ts = fso.CreateTextFile(cacheFile, True)
+    If Err.Number <> 0 Then Exit Sub
+    Dim key As Variant
+    For Each key In cache.Keys
+        ts.WriteLine key & vbTab & cache(key)
+    Next key
+    ts.Close
+    On Error GoTo 0
+End Sub
 
 Private Function ShortLogText(text As String, Optional maxLen As Long = 240) As String
     Dim s As String
@@ -1252,20 +1332,24 @@ Private Sub ApplyShapeFields(ws As Worksheet, shp As Object, mdLine As Long, _
                              shpOnAction As String, shpStyle As String)
     Dim fml As String
 
-    On Error Resume Next
-    Err.Clear
-    If shpLabel = "-" Then
-        shp.TextFrame.Characters.text = ""
-    Else
-        shp.TextFrame.Characters.text = UnescapeCellValue(shpLabel)
-    End If
-    If Err.Number <> 0 Then
-        LogImportDiagnostic "ERROR sheet=" & ws.codeName & _
-                            " mdLine=" & mdLine & _
-                            " shape label failed name=" & ShortLogText(shp.Name) & _
-                            " " & ErrText()
+    If shp.HasTextFrame Then
+        On Error Resume Next
         Err.Clear
+        If shpLabel = "-" Then
+            shp.TextFrame.Characters.text = ""
+        Else
+            shp.TextFrame.Characters.text = UnescapeCellValue(shpLabel)
+        End If
+        If Err.Number <> 0 Then
+            LogImportDiagnostic "ERROR sheet=" & ws.codeName & _
+                                " mdLine=" & mdLine & _
+                                " shape label failed name=" & ShortLogText(shp.Name) & _
+                                " " & ErrText()
+            Err.Clear
+        End If
+        On Error GoTo 0
     End If
+    On Error Resume Next
 
     If shpFormula <> "-" And shpFormula <> "" Then
         fml = shpFormula

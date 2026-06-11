@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Performance
+- `ExportAllSheetMapsToMD` now sets `ScreenUpdating = False`, `Calculation = xlManual`, and `EnableEvents = False` during the export loop (same as import). This prevents screen repainting between cell reads, making export significantly faster for large sheets and ensuring the status bar progress message is visible.
+- `ImportAllSheetMapsFromMD` skips sheets whose Markdown file has not changed since the last export or import. After each export/import the file size and modification time of every `*.md` file are written to `sheet/xlsm_devkit_sync.tsv`. On the next import run each file is compared against this cache; unchanged files are skipped entirely, reducing a full re-import of unmodified sheets to a near-instant check.
+
+### Fixed
+- `ApplyShapeFields` no longer logs Err 438 for Picture-type shapes. Picture objects do not have a text frame; the label assignment is now guarded by `shp.HasTextFrame` and silently skipped instead of attempting the write and logging a spurious error.
+
 ## [1.9.0] - 2026-06-11
 
 ### Performance
