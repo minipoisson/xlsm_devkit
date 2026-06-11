@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.9.0] - 2026-06-11
+
+### Performance
+- `ApplySheetMapMarkdown` no longer freezes on sheets with thousands of merge slave cells (e.g. Sheet4 with 7357 lines and ~6000 slaves). Two additional COM-call bottlenecks eliminated:
+  1. Pass 1 slave handling called `ws.Range(addr)` + `ws.Cells(...).Address(...)` per slave cell (~3 COM calls × ~6000 slaves = ~18 000 calls). Now uses `AddrRowNum`/`AddrColNum`/`CellAddrStr` pure string parsing -- zero COM calls per slave unless a named range must be applied.
+  2. `ReconstructMerges` called `ws.Range` on every slave entry to read `.Row`/`.Column` (~18 000 COM calls for ~6000 slaves). Now uses the same string parsers and makes only one `ws.Range(...).Merge` call per distinct merge group.
+- New private helper: `CellAddrStr(r, c)` -- inverse of `AddrRowNum`/`AddrColNum`; converts row/column numbers back to an A1-style address string without touching the worksheet object model.
+
 ## [1.8.0] - 2026-06-11
 
 ### Added
