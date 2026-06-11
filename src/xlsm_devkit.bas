@@ -1036,6 +1036,7 @@ Private Sub ApplySheetMapMarkdown(ws As Worksheet, mdContent As String)
     ws.Cells.UnMerge
     If Err.Number <> 0 Then LogImportDiagnostic "WARN sheet=" & ws.codeName & " unmerge failed " & ErrText()
     On Error GoTo 0
+    DoEvents
 
     ' Cleanup: clear the entire Markdown bounding box in 3 batch operations.
     ' Previous cell-by-cell Union approach caused O(n^2) slowdown and COM disconnects
@@ -1056,6 +1057,7 @@ Private Sub ApplySheetMapMarkdown(ws As Worksheet, mdContent As String)
     ReDim masterAddrs(UBound(lines))
 
     For i = 0 To UBound(lines)
+        If (i Mod 1000) = 0 And i > 0 Then DoEvents
         line = Trim(lines(i))
 
         If line = "## Shapes" Then
