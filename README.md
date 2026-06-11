@@ -17,7 +17,7 @@ Import `xlsm_devkit.bas` alone to get the following macros:
 | `CallImportAllComponents` | Imports all VBA modules and forms from `src/` |
 | `CallExportAllSheetMapsToMD` | Exports cell values, shapes, formulas, and styles of all sheets to `sheet/*.md` |
 | `CallImportAllSheetMapsFromMD` | Restores cell values, formulas, styles, named ranges, data-validation lists, and merged regions from `sheet/*.md` |
-| `CallInitDevMode` | Creates `DEV_<name>.xlsm` from the current workbook and imports all `devkit_*` files from `src/` into it |
+| `CallInitDevMode` | Creates `DEV_<name>.xlsm` from the current workbook and imports all `devkit_*` files from `src/` into it. If the source workbook is `.xlsx`, the DEV_ copy is automatically created as `.xlsm`. |
 | `CallSaveAsRelease` | Saves a production copy (strips `DEV_` prefix, removes all devkit modules); call from a `DEV_` workbook |
 
 Modules (`.bas`) and forms (`.frm`/`.frx`) are handled together by the same export/import operation.  
@@ -103,6 +103,8 @@ When you want to keep the user-facing workbook free from devkit modules, use the
 3. Run `CallInitDevMode` from the Macro dialog (`Alt+F8`). It creates `DEV_MyTool.xlsm` in the same folder and imports all `devkit_*` files from `src/` into the copy.
 4. Close `MyTool.xlsm` **without saving** — this keeps the production file free from devkit modules.
 5. Open `DEV_MyTool.xlsm` and develop there.
+
+> **Working with `.xlsx` source files:** `CallInitDevMode` also supports `.xlsx` workbooks. The DEV_ copy is always created as `.xlsm` (macro-enabled format), so all devkit functionality is available regardless of the source format. After development, `CallSaveAsRelease` produces a `MyTool.xlsm` release file; use **File → Save As** if you need a `.xlsx` output instead.
 
 **Release (`CallSaveAsRelease`)**
 

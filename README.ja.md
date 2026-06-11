@@ -15,7 +15,7 @@ VBE（Visual Basic Editor）と外部エディタ（VS Code など）を組み�
 | `CallImportAllComponents` | 全モジュール・フォームを `src/` から読み込む |
 | `CallExportAllSheetMapsToMD` | 全シートのセル・図形・数式・スタイルを `sheet/*.md` に書き出す |
 | `CallImportAllSheetMapsFromMD` | `sheet/*.md` からセル値・数式・スタイル・名前付き範囲・入力規則リスト・結合セルを復元する |
-| `CallInitDevMode` | 現在のブックから `DEV_<name>.xlsm` を作成し、`src/` の `devkit_*` ファイルをすべてインポートする |
+| `CallInitDevMode` | 現在のブックから `DEV_<name>.xlsm` を作成し、`src/` の `devkit_*` ファイルをすべてインポートする。ソースが `.xlsx` の場合も DEV_ コピーは自動的に `.xlsm` として作成される。 |
 | `CallSaveAsRelease` | `DEV_` プレフィックスを除いた本番コピーを保存し、devkit モジュールをすべて削除する（`DEV_` ブックから呼ぶ） |
 
 モジュール（`.bas`）とフォーム（`.frm`/`.frx`）は同じ操作でまとめて入出力されます。  
@@ -101,6 +101,8 @@ SetLang ""     ' システム設定に戻す
 3. マクロ ダイアログ（`Alt+F8`）から `CallInitDevMode` を実行する。`DEV_MyTool.xlsm` が同フォルダに作成され、`src/` にある `devkit_*` ファイルがすべてインポートされる。
 4. `MyTool.xlsm` を**保存せずに**閉じる。こうすることで本番ファイルには devkit モジュールが残らない。
 5. `DEV_MyTool.xlsm` を開いて開発を進める。
+
+> **`.xlsx` ファイルをソースとして使う場合:** `CallInitDevMode` は `.xlsx` ブックにも対応しています。DEV_ コピーは常に `.xlsm`（マクロ有効形式）として作成されるため、ソース形式に関わらず devkit の全機能が使えます。開発後、`CallSaveAsRelease` で `MyTool.xlsm` というリリースファイルが作成されます。`.xlsx` 形式で配布したい場合は、そのファイルから **ファイル → 名前を付けて保存** で `.xlsx` を選んでください。
 
 **リリース (`CallSaveAsRelease`)**
 
