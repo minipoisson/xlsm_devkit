@@ -4,12 +4,36 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.10.0] - 2026-06-14
+
+### Added
+- Selective import write-back: place `xlsm_devkit.ini` in the workbook folder with an `[import]` section to control which style categories are applied on import. Each key (`value`, `formula`, `numfmt`, `unlocked`, `list`, `bg`, `fg`, `font_size`, `bold`, `italic`, `strike`, `wrap`, `halign`, `valign`, `merge`, `hidden_rows`, `hidden_cols`, `shapes`) accepts `0` or `1`. Missing keys and a missing file both default to `1` for backward compatibility, except `unlocked` which defaults to `0` (see **Changed** below). Setting `merge=0` skips `ws.Cells.UnMerge` entirely, eliminating the 8--15 minute bottleneck on sheets with thousands of merged regions.
+- `DisabledImportSettingsStr`: new private helper; returns a space-separated list of `ImportSettings` flags currently set to `False` (e.g. `"bg fg font_size ..."`), or `"(all enabled)"` when all flags are `True`. Called at import start and logged via `LogImportDiagnostic` so diagnostic logs show which categories are inactive.
+
 ### Performance
 - `ExportAllSheetMapsToMD` now sets `ScreenUpdating = False`, `Calculation = xlManual`, and `EnableEvents = False` during the export loop (same as import). This prevents screen repainting between cell reads, making export significantly faster for large sheets and ensuring the status bar progress message is visible.
 - `ImportAllSheetMapsFromMD` skips sheets whose Markdown file has not changed since the last export or import. After each export/import the file size and modification time of every `*.md` file are written to `sheet/xlsm_devkit_sync.tsv`. On the next import run each file is compared against this cache; unchanged files are skipped entirely, reducing a full re-import of unmodified sheets to a near-instant check.
 
+### Changed
+- `ImportUnlocked` now defaults to `False` (previously `True` via the all-enabled backward-compatibility default). Setting `rng.Locked = False` on slave cells of still-merged ranges fails with Error 1004 when `merge=0` (UnMerge skipped). To apply `Unlocked` during import, explicitly set `unlocked=1` in `xlsm_devkit.ini`; this works correctly only when `merge=1` is also set so cells are individually addressable after UnMerge.
+
 ### Fixed
+- `ExportAllSheetMapsToMD` and `ImportAllSheetMapsFromMD` now call `DoEvents` inside the per-sheet loop so that `Application.StatusBar` progress messages are repainted in real time. Previously the status bar was updated only after the loop completed, making progress invisible on large workbooks.
+- `ApplySheetMapMarkdown` no longer raises `RPC_E_DISCONNECTED` on sheets with large merged regions after `ws.Cells.UnMerge` completes. A `DoEvents` call immediately after `UnMerge` flushes the COM message queue; an additional `DoEvents` every 1000 rows in Pass 1 prevents queue starvation on very large sheets.
 - `ApplyShapeFields` no longer logs Err 438 for Picture-type shapes. Picture objects do not have a text frame; the label assignment is now guarded by `shp.HasTextFrame` and silently skipped instead of attempting the write and logging a spurious error.
+- `ApplyCellStyle` no longer emits `WARN unknown style token` for recognized tokens that are disabled in `xlsm_devkit.ini` (e.g. `bg=0` suppresses `BG:#rrggbb` tokens that were incorrectly falling through to the WARN branch). Token name recognition is now separate from the cfg-flag check; known tokens with disabled flags are silently skipped. Only genuinely unknown tokens still produce a WARN.
+- `ApplyCellStyle`: `BOLD`, `ITALIC`, `STRIKE`, `WRAP`, and `UNLOCKED` token application is now guarded with `On Error Resume Next` / `On Error GoTo 0` and `LogImportDiagnostic` error logging, consistent with `BG`, `FG`, `FONTSIZE`, `NUMFMT`, `HALIGN`, and `VALIGN`. Previously, a runtime error in any of these five branches (e.g. Err 1004 from `rng.Locked = False` on a slave cell of a merged range) would abort the entire import.
+- `DisabledImportSettingsStr`: fixed a compile error -- `ReDim Preserve` on a fixed-size array declared as `Dim parts(17) As String` is not permitted; changed to a dynamic array with an initial `ReDim`.
+- `ApplyCellStyle` -- `UNLOCKED` token: changed `rng.Locked = False` to
+  `rng.MergeArea.Locked = False`. Excel raises Err 1004 when setting `.Locked` on any single-cell
+  reference that belongs to a merged area (master or slave); using `MergeArea` addresses the
+  entire merged region and succeeds regardless of whether `rng` is the master, a slave, or an
+  individual cell.
+- `ApplyCellStyle`: when `rng` is a slave cell of a currently-merged region (can occur when
+  `merge=0` leaves cells merged but the sheet map treats those cells as individual), the merge
+  area is temporarily unmerged, all style tokens are applied, then the area is re-merged.
+  This is a defensive preamble that protects all tokens; the `UNLOCKED` fix above makes it
+  specifically unnecessary for the Locked property, but it remains for other potential failures.
 
 ## [1.9.0] - 2026-06-11
 

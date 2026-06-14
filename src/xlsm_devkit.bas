@@ -596,6 +596,7 @@ Sub ImportAllSheetMapsFromMD(Optional skipConfirm As Boolean = False)
     cfg = LoadImportSettings(ThisWorkbook.Path & "\")
     StartImportDiagnosticLog sheetFolderPath
     LogImportDiagnostic "ImportAllSheetMapsFromMD start workbook=" & ThisWorkbook.FullName
+    LogImportDiagnostic "ImportSettings disabled=" & DisabledImportSettingsStr(cfg)
     If AbortIfProtectedImportSheets(sheetFolderPath, fso, "ImportAllSheetMapsFromMD") Then
         GoTo lblFin
     End If
@@ -737,7 +738,7 @@ Private Function LoadImportSettings(wbFolder As String) As ImportSettings
     cfg.ImportFormula    = True
     cfg.ImportNamedRange = True
     cfg.ImportNumFmt     = True
-    cfg.ImportUnlocked   = True
+    cfg.ImportUnlocked   = False
     cfg.ImportList       = True
     cfg.ImportBG         = True
     cfg.ImportFG         = True
@@ -809,6 +810,36 @@ Private Function LoadImportSettings(wbFolder As String) As ImportSettings
     Loop
     ts.Close
     LoadImportSettings = cfg
+End Function
+
+Private Function DisabledImportSettingsStr(cfg As ImportSettings) As String
+    Dim parts() As String: ReDim parts(17)
+    Dim n As Long
+    n = 0
+    If Not cfg.ImportValue      Then parts(n) = "value"      : n = n + 1
+    If Not cfg.ImportFormula    Then parts(n) = "formula"    : n = n + 1
+    If Not cfg.ImportNumFmt     Then parts(n) = "numfmt"     : n = n + 1
+    If Not cfg.ImportUnlocked   Then parts(n) = "unlocked"   : n = n + 1
+    If Not cfg.ImportList       Then parts(n) = "list"       : n = n + 1
+    If Not cfg.ImportBG         Then parts(n) = "bg"         : n = n + 1
+    If Not cfg.ImportFG         Then parts(n) = "fg"         : n = n + 1
+    If Not cfg.ImportFontSize   Then parts(n) = "font_size"  : n = n + 1
+    If Not cfg.ImportBold       Then parts(n) = "bold"       : n = n + 1
+    If Not cfg.ImportItalic     Then parts(n) = "italic"     : n = n + 1
+    If Not cfg.ImportStrike     Then parts(n) = "strike"     : n = n + 1
+    If Not cfg.ImportWrap       Then parts(n) = "wrap"       : n = n + 1
+    If Not cfg.ImportHAlign     Then parts(n) = "halign"     : n = n + 1
+    If Not cfg.ImportVAlign     Then parts(n) = "valign"     : n = n + 1
+    If Not cfg.ImportMerge      Then parts(n) = "merge"      : n = n + 1
+    If Not cfg.ImportHiddenRows Then parts(n) = "hidden_rows": n = n + 1
+    If Not cfg.ImportHiddenCols Then parts(n) = "hidden_cols": n = n + 1
+    If Not cfg.ImportShapes     Then parts(n) = "shapes"     : n = n + 1
+    If n = 0 Then
+        DisabledImportSettingsStr = "(all enabled)"
+    Else
+        ReDim Preserve parts(n - 1)
+        DisabledImportSettingsStr = Join(parts, " ")
+    End If
 End Function
 
 Private Function ShortLogText(text As String, Optional maxLen As Long = 240) As String
@@ -1964,7 +1995,31 @@ Private Sub ApplyCellStyle(rng As Range, styleStr As String, cfg As ImportSettin
     Dim tokenValueRaw As String
     Dim sep As Long
     Dim k As Long
+    Dim savedMergeArea As Range
     parts = ParseStyleTokens(styleStr)
+
+    ' If rng is a slave cell in a currently-merged region, temporarily unmerge so
+    ' per-cell style operations (rng.Locked, etc.) succeed.  Re-merge at the end.
+    Set savedMergeArea = Nothing
+    On Error Resume Next
+    If rng.MergeCells Then
+        If rng.Row <> rng.MergeArea.Row Or rng.Column <> rng.MergeArea.Column Then
+            Set savedMergeArea = rng.MergeArea
+            If Err.Number <> 0 Then Set savedMergeArea = Nothing
+        End If
+    End If
+    On Error GoTo 0
+    If Not savedMergeArea Is Nothing Then
+        On Error Resume Next
+        savedMergeArea.UnMerge
+        If Err.Number <> 0 Then
+            LogImportDiagnostic "WARN sheet=" & rng.Worksheet.codeName & _
+                                " addr=" & rng.Address(False, False) & _
+                                " slave-unmerge failed " & ErrText()
+            Set savedMergeArea = Nothing
+        End If
+        On Error GoTo 0
+    End If
 
     For k = 0 To UBound(parts)
         p = Trim(parts(k))
@@ -1980,109 +2035,193 @@ Private Sub ApplyCellStyle(rng As Range, styleStr As String, cfg As ImportSettin
             tokenValue = ""
         End If
 
-        If tokenName = "BG" And sep > 0 And cfg.ImportBG Then
-            On Error Resume Next
-            Err.Clear
-            rng.Interior.Color = HexToRGB(tokenValue)
-            If Err.Number <> 0 Then
-                LogImportDiagnostic "ERROR sheet=" & rng.Worksheet.codeName & _
-                                    " addr=" & rng.Address(False, False) & _
-                                    " apply BG failed " & ErrText() & _
-                                    " style=" & ShortLogText(styleStr)
+        If tokenName = "BG" And sep > 0 Then
+            If cfg.ImportBG Then
+                On Error Resume Next
                 Err.Clear
+                rng.Interior.Color = HexToRGB(tokenValue)
+                If Err.Number <> 0 Then
+                    LogImportDiagnostic "ERROR sheet=" & rng.Worksheet.codeName & _
+                                        " addr=" & rng.Address(False, False) & _
+                                        " apply BG failed " & ErrText() & _
+                                        " style=" & ShortLogText(styleStr)
+                    Err.Clear
+                End If
+                On Error GoTo 0
             End If
-            On Error GoTo 0
-        ElseIf tokenName = "FG" And sep > 0 And cfg.ImportFG Then
-            On Error Resume Next
-            Err.Clear
-            rng.Font.Color = HexToRGB(tokenValue)
-            If Err.Number <> 0 Then
-                LogImportDiagnostic "ERROR sheet=" & rng.Worksheet.codeName & _
-                                    " addr=" & rng.Address(False, False) & _
-                                    " apply FG failed " & ErrText() & _
-                                    " style=" & ShortLogText(styleStr)
+        ElseIf tokenName = "FG" And sep > 0 Then
+            If cfg.ImportFG Then
+                On Error Resume Next
                 Err.Clear
+                rng.Font.Color = HexToRGB(tokenValue)
+                If Err.Number <> 0 Then
+                    LogImportDiagnostic "ERROR sheet=" & rng.Worksheet.codeName & _
+                                        " addr=" & rng.Address(False, False) & _
+                                        " apply FG failed " & ErrText() & _
+                                        " style=" & ShortLogText(styleStr)
+                    Err.Clear
+                End If
+                On Error GoTo 0
             End If
-            On Error GoTo 0
-        ElseIf tokenName = "FONTSIZE" And sep > 0 And cfg.ImportFontSize Then
-            On Error Resume Next
-            Err.Clear
-            rng.Font.Size = CDbl(tokenValue)
-            If Err.Number <> 0 Then
-                LogImportDiagnostic "ERROR sheet=" & rng.Worksheet.codeName & _
-                                    " addr=" & rng.Address(False, False) & _
-                                    " apply FontSize failed " & ErrText() & _
-                                    " style=" & ShortLogText(styleStr)
+        ElseIf tokenName = "FONTSIZE" And sep > 0 Then
+            If cfg.ImportFontSize Then
+                On Error Resume Next
                 Err.Clear
+                rng.Font.Size = CDbl(tokenValue)
+                If Err.Number <> 0 Then
+                    LogImportDiagnostic "ERROR sheet=" & rng.Worksheet.codeName & _
+                                        " addr=" & rng.Address(False, False) & _
+                                        " apply FontSize failed " & ErrText() & _
+                                        " style=" & ShortLogText(styleStr)
+                    Err.Clear
+                End If
+                On Error GoTo 0
             End If
-            On Error GoTo 0
-        ElseIf tokenName = "NUMFMT" And sep > 0 And cfg.ImportNumFmt Then
-            On Error Resume Next
-            Err.Clear
-            rng.NumberFormat = tokenValue
-            If Err.Number <> 0 Then
-                LogImportDiagnostic "ERROR sheet=" & rng.Worksheet.codeName & _
-                                    " addr=" & rng.Address(False, False) & _
-                                    " apply NumFmt failed " & ErrText() & _
-                                    " style=" & ShortLogText(styleStr)
+        ElseIf tokenName = "NUMFMT" And sep > 0 Then
+            If cfg.ImportNumFmt Then
+                On Error Resume Next
                 Err.Clear
+                rng.NumberFormat = tokenValue
+                If Err.Number <> 0 Then
+                    LogImportDiagnostic "ERROR sheet=" & rng.Worksheet.codeName & _
+                                        " addr=" & rng.Address(False, False) & _
+                                        " apply NumFmt failed " & ErrText() & _
+                                        " style=" & ShortLogText(styleStr)
+                    Err.Clear
+                End If
+                On Error GoTo 0
             End If
-            On Error GoTo 0
-        ElseIf tokenName = "BOLD" And cfg.ImportBold Then
-            If StyleFlagEnabled(tokenValueRaw, sep > 0) Then rng.Font.Bold = True
-        ElseIf tokenName = "ITALIC" And cfg.ImportItalic Then
-            If StyleFlagEnabled(tokenValueRaw, sep > 0) Then rng.Font.Italic = True
-        ElseIf tokenName = "STRIKE" And cfg.ImportStrike Then
-            If StyleFlagEnabled(tokenValueRaw, sep > 0) Then rng.Font.Strikethrough = True
-        ElseIf tokenName = "WRAP" And cfg.ImportWrap Then
-            If StyleFlagEnabled(tokenValueRaw, sep > 0) Then rng.WrapText = True
-        ElseIf tokenName = "UNLOCKED" And cfg.ImportUnlocked Then
-            If StyleFlagEnabled(tokenValueRaw, sep > 0) Then rng.Locked = False
-        ElseIf tokenName = "HALIGN" And sep > 0 And cfg.ImportHAlign Then
-            On Error Resume Next
-            Err.Clear
-            rng.HorizontalAlignment = TextToHorizontalAlignment(tokenValue)
-            If Err.Number <> 0 Then
-                LogImportDiagnostic "ERROR sheet=" & rng.Worksheet.codeName & _
-                                    " addr=" & rng.Address(False, False) & _
-                                    " apply HAlign failed " & ErrText() & _
-                                    " style=" & ShortLogText(styleStr)
+        ElseIf tokenName = "BOLD" Then
+            If cfg.ImportBold Then
+                If StyleFlagEnabled(tokenValueRaw, sep > 0) Then
+                    On Error Resume Next
+                    Err.Clear
+                    rng.Font.Bold = True
+                    If Err.Number <> 0 Then
+                        LogImportDiagnostic "ERROR sheet=" & rng.Worksheet.codeName & _
+                                            " addr=" & rng.Address(False, False) & _
+                                            " apply Bold failed " & ErrText() & _
+                                            " style=" & ShortLogText(styleStr)
+                        Err.Clear
+                    End If
+                    On Error GoTo 0
+                End If
+            End If
+        ElseIf tokenName = "ITALIC" Then
+            If cfg.ImportItalic Then
+                If StyleFlagEnabled(tokenValueRaw, sep > 0) Then
+                    On Error Resume Next
+                    Err.Clear
+                    rng.Font.Italic = True
+                    If Err.Number <> 0 Then
+                        LogImportDiagnostic "ERROR sheet=" & rng.Worksheet.codeName & _
+                                            " addr=" & rng.Address(False, False) & _
+                                            " apply Italic failed " & ErrText() & _
+                                            " style=" & ShortLogText(styleStr)
+                        Err.Clear
+                    End If
+                    On Error GoTo 0
+                End If
+            End If
+        ElseIf tokenName = "STRIKE" Then
+            If cfg.ImportStrike Then
+                If StyleFlagEnabled(tokenValueRaw, sep > 0) Then
+                    On Error Resume Next
+                    Err.Clear
+                    rng.Font.Strikethrough = True
+                    If Err.Number <> 0 Then
+                        LogImportDiagnostic "ERROR sheet=" & rng.Worksheet.codeName & _
+                                            " addr=" & rng.Address(False, False) & _
+                                            " apply Strike failed " & ErrText() & _
+                                            " style=" & ShortLogText(styleStr)
+                        Err.Clear
+                    End If
+                    On Error GoTo 0
+                End If
+            End If
+        ElseIf tokenName = "WRAP" Then
+            If cfg.ImportWrap Then
+                If StyleFlagEnabled(tokenValueRaw, sep > 0) Then
+                    On Error Resume Next
+                    Err.Clear
+                    rng.WrapText = True
+                    If Err.Number <> 0 Then
+                        LogImportDiagnostic "ERROR sheet=" & rng.Worksheet.codeName & _
+                                            " addr=" & rng.Address(False, False) & _
+                                            " apply Wrap failed " & ErrText() & _
+                                            " style=" & ShortLogText(styleStr)
+                        Err.Clear
+                    End If
+                    On Error GoTo 0
+                End If
+            End If
+        ElseIf tokenName = "UNLOCKED" Then
+            If cfg.ImportUnlocked Then
+                If StyleFlagEnabled(tokenValueRaw, sep > 0) Then
+                    On Error Resume Next
+                    Err.Clear
+                    rng.MergeArea.Locked = False
+                    If Err.Number <> 0 Then
+                        LogImportDiagnostic "ERROR sheet=" & rng.Worksheet.codeName & _
+                                            " addr=" & rng.Address(False, False) & _
+                                            " apply Unlocked failed " & ErrText() & _
+                                            " style=" & ShortLogText(styleStr)
+                        Err.Clear
+                    End If
+                    On Error GoTo 0
+                End If
+            End If
+        ElseIf tokenName = "HALIGN" And sep > 0 Then
+            If cfg.ImportHAlign Then
+                On Error Resume Next
                 Err.Clear
+                rng.HorizontalAlignment = TextToHorizontalAlignment(tokenValue)
+                If Err.Number <> 0 Then
+                    LogImportDiagnostic "ERROR sheet=" & rng.Worksheet.codeName & _
+                                        " addr=" & rng.Address(False, False) & _
+                                        " apply HAlign failed " & ErrText() & _
+                                        " style=" & ShortLogText(styleStr)
+                    Err.Clear
+                End If
+                On Error GoTo 0
             End If
-            On Error GoTo 0
-        ElseIf tokenName = "VALIGN" And sep > 0 And cfg.ImportVAlign Then
-            On Error Resume Next
-            Err.Clear
-            rng.VerticalAlignment = TextToVerticalAlignment(tokenValue)
-            If Err.Number <> 0 Then
-                LogImportDiagnostic "ERROR sheet=" & rng.Worksheet.codeName & _
-                                    " addr=" & rng.Address(False, False) & _
-                                    " apply VAlign failed " & ErrText() & _
-                                    " style=" & ShortLogText(styleStr)
+        ElseIf tokenName = "VALIGN" And sep > 0 Then
+            If cfg.ImportVAlign Then
+                On Error Resume Next
                 Err.Clear
+                rng.VerticalAlignment = TextToVerticalAlignment(tokenValue)
+                If Err.Number <> 0 Then
+                    LogImportDiagnostic "ERROR sheet=" & rng.Worksheet.codeName & _
+                                        " addr=" & rng.Address(False, False) & _
+                                        " apply VAlign failed " & ErrText() & _
+                                        " style=" & ShortLogText(styleStr)
+                    Err.Clear
+                End If
+                On Error GoTo 0
             End If
-            On Error GoTo 0
-        ElseIf tokenName = "LIST" And sep > 0 And cfg.ImportList Then
-            Dim listFml As String
-            listFml = tokenValue
-            On Error Resume Next
-            Err.Clear
-            rng.Validation.Delete
-            If Err.Number <> 0 Then
-                LogImportDiagnostic "WARN sheet=" & rng.Worksheet.codeName & _
-                                    " addr=" & rng.Address(False, False) & _
-                                    " delete validation failed " & ErrText()
+        ElseIf tokenName = "LIST" And sep > 0 Then
+            If cfg.ImportList Then
+                Dim listFml As String
+                listFml = tokenValue
+                On Error Resume Next
                 Err.Clear
+                rng.Validation.Delete
+                If Err.Number <> 0 Then
+                    LogImportDiagnostic "WARN sheet=" & rng.Worksheet.codeName & _
+                                        " addr=" & rng.Address(False, False) & _
+                                        " delete validation failed " & ErrText()
+                    Err.Clear
+                End If
+                rng.Validation.Add Type:=xlValidateList, Formula1:=listFml
+                If Err.Number <> 0 Then
+                    LogImportDiagnostic "ERROR sheet=" & rng.Worksheet.codeName & _
+                                        " addr=" & rng.Address(False, False) & _
+                                        " add validation failed " & ErrText() & _
+                                        " formula=" & ShortLogText(listFml)
+                    Err.Clear
+                End If
+                On Error GoTo 0
             End If
-            rng.Validation.Add Type:=xlValidateList, Formula1:=listFml
-            If Err.Number <> 0 Then
-                LogImportDiagnostic "ERROR sheet=" & rng.Worksheet.codeName & _
-                                    " addr=" & rng.Address(False, False) & _
-                                    " add validation failed " & ErrText() & _
-                                    " formula=" & ShortLogText(listFml)
-                Err.Clear
-            End If
-            On Error GoTo 0
         ElseIf p <> "" Then
             LogImportDiagnostic "WARN sheet=" & rng.Worksheet.codeName & _
                                 " addr=" & rng.Address(False, False) & _
@@ -2091,6 +2230,17 @@ Private Sub ApplyCellStyle(rng As Range, styleStr As String, cfg As ImportSettin
         End If
 lblNextCellStyle:
     Next k
+
+    If Not savedMergeArea Is Nothing Then
+        On Error Resume Next
+        savedMergeArea.Merge
+        If Err.Number <> 0 Then
+            LogImportDiagnostic "WARN sheet=" & rng.Worksheet.codeName & _
+                                " addr=" & rng.Address(False, False) & _
+                                " slave-remerge failed " & ErrText()
+        End If
+        On Error GoTo 0
+    End If
 End Sub
 
 Private Sub ApplyCellName(ws As Worksheet, rng As Range, nameStr As String)

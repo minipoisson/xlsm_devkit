@@ -130,9 +130,41 @@ Run `ImportAllModulesFormsSheetMaps` to import all modules, forms, and sheet map
 
 - Files from `src/` are loaded into the project. Existing modules/forms are updated; new ones are added. Companion `*.frx` files are picked up automatically.
 - Each `sheet/*.md` is applied to the corresponding sheet: cell values, formulas, background/foreground colors, font sizes, number formats, alignment, cell protection, data-validation lists, named ranges, and merged regions are all restored.
+- Sheet maps whose Markdown file has not changed since the last export or import are skipped automatically. File size and modification time are compared against a sync cache (`sheet/xlsm_devkit_sync.tsv`); only changed files are processed, so a full re-import of an unmodified workbook completes in near-instant time.
 
 To import only modules and forms (without sheet maps), run `CallImportAllComponents`.  
 To import only sheet maps, run `CallImportAllSheetMapsFromMD`.
+
+### Selective import (`xlsm_devkit.ini`)
+
+By default every token in a sheet map is applied on import. To disable specific categories, place an `xlsm_devkit.ini` file next to the workbook with an `[import]` section:
+
+```ini
+[import]
+; 1 = apply on import (default if key or file is absent), 0 = skip
+; Exception: unlocked defaults to 0 -- setting rng.Locked on slave cells of merged
+; ranges fails with Err 1004 when merge=0; enable only together with merge=1
+value=1
+formula=1
+numfmt=1
+unlocked=0
+list=1
+bg=0
+fg=0
+font_size=0
+bold=0
+italic=0
+strike=0
+wrap=0
+halign=0
+valign=0
+merge=0
+hidden_rows=0
+hidden_cols=0
+shapes=0
+```
+
+The most impactful setting is `merge=0`: it skips `ws.Cells.UnMerge`, a blocking COM call that can take 8--15 minutes on sheets with thousands of merged regions. With `merge=0` the merged-cell structure is left intact and only cell values/formulas are updated.
 
 ## Prerequisites
 
@@ -156,8 +188,9 @@ This module uses ADODB.Stream and the Win32 API `GetACP()` to keep files on disk
 
 ```
 <workbook folder>/
-  src/          # Exported .bas and .frm files (UTF-8, BOM-less) + companion .frx binaries
-  sheet/        # Exported sheet map .md files (UTF-8, BOM-less)
+  src/                     # Exported .bas and .frm files (UTF-8, BOM-less) + companion .frx binaries
+  sheet/                   # Exported sheet map .md files (UTF-8, BOM-less)
+  xlsm_devkit.ini          # Optional: selective import settings (see Selective import)
 ```
 
 ## Upgrading
