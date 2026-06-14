@@ -524,6 +524,7 @@ Sub ExportAllSheetMapsToMD(Optional skipConfirm As Boolean = False)
         sheetIndex = sheetIndex + 1
         Application.StatusBar = Fmt(t("status.export_sheet_map", "Exporting sheet map {0}/{1}: {2}"), _
                                     sheetIndex, sheetCount, ws.Name)
+        DoEvents
         mdContent = GenerateSheetMapMarkdown(ws)
 
         fileName = sheetFolderPath & "\" & ws.codeName & ".md"
@@ -604,6 +605,7 @@ Sub ImportAllSheetMapsFromMD(Optional skipConfirm As Boolean = False)
         sheetIndex = sheetIndex + 1
         Application.StatusBar = Fmt(t("status.import_sheet_map", "Importing sheet map {0}/{1}: {2}"), _
                                     sheetIndex, sheetCount, ws.Name)
+        DoEvents
         fileName = sheetFolderPath & "\" & ws.codeName & ".md"
         If fso.FileExists(fileName) Then
             Dim fi As Object
