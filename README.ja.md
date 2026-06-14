@@ -165,6 +165,113 @@ shapes=0
 
 最も効果的な設定は `merge=0` です。`ws.Cells.UnMerge` へのブロッキング COM コールをスキップするため、結合セルが多数あるシート（例：縦横に結合されたヘッダーを持つ大型レポートシート）での 8〜15 分のボトルネックを解消できます。`merge=0` の場合、結合構造はそのままに、セル値・数式のみが更新されます。
 
+## シートマップ形式
+
+各シートは `sheet/<CodeName>.md` としてエクスポートされます。ファイルはメタデータヘッダーで始まり、Markdown テーブル、そして省略可能な Shapes セクションが続きます。
+
+### ファイルヘッダー
+
+```
+# Sheet Configuration
+- VBA CodeName: Sheet1
+- Excel UI Name: Summary
+- Hidden Rows: 3, 5-7
+- Hidden Columns: B, D-F
+```
+
+`Hidden Rows` と `Hidden Columns` は非表示行・列が存在する場合のみ出力されます。
+
+### セルテーブル
+
+```markdown
+| Address | Name | Value / Label | Formula | Style |
+| :--- | :--- | :--- | :--- | :--- |
+| A1 | - | Hello | - | Bold |
+| B2 | rate | 0.05 | `=A1*0.05` | FontSize:14; NumFmt:0.00% |
+| C3 | - | !merged_left | - | - |
+```
+
+| 列 | 内容 |
+| :--- | :--- |
+| `Address` | セルアドレス（例: `A1`、`B12`） |
+| `Name` | このセルに紐づく名前付き範囲の名前。なければ `-`。シートスコープの名前はワークシートプレフィックス付き（`Sheet1!myRange`）。 |
+| `Value / Label` | 表示値（数式セルの場合は評価結果）。マージスレーブセルの場合はマージマーカー（後述）。 |
+| `Formula` | バッククォートで囲まれた数式（`` `=A1*B1` ``）。数式セルでない場合は `-`。 |
+| `Style` | セミコロン区切りのスタイルトークン。スタイルなしの場合は `-`。 |
+
+値も数式も背景色もないセルはエクスポートから除外されます。
+
+### スタイルトークン
+
+| トークン | 値の形式 | Export 条件 | Import フラグ | 不在時の動作 |
+| :--- | :--- | :--- | :--- | :--- |
+| `BG:#rrggbb` | 6桁 16進 | 背景色が設定されている | `bg=1` | 変更なし |
+| `FG:#rrggbb` | 6桁 16進 | 文字色が設定されている | `fg=1` | 変更なし |
+| `FontSize:<n>` | 整数 pt | 標準フォントサイズと異なる | `font_size=1` | 変更なし |
+| `Bold` | フラグのみ | `Font.Bold = True` | `bold=1` | `False` にリセット |
+| `Italic` | フラグのみ | `Font.Italic = True` | `italic=1` | `False` にリセット |
+| `Strike` | フラグのみ | `Font.Strikethrough = True` | `strike=1` | `False` にリセット |
+| `Wrap` | フラグのみ | `WrapText = True` | `wrap=1` | `False` にリセット |
+| `Unlocked` | フラグのみ | `Locked = False` | `unlocked=1` | `True`（Locked）にリセット |
+| `NumFmt:<format>` | Excel 書式文字列 | `"General"` 以外 | `numfmt=1` | 変更なし |
+| `List:<formula>` | 例: `=$A$1:$A$10` | 入力規則リストが設定されている | `list=1` | 変更なし |
+| `HAlign:<value>` | 下記参照 | 出力なし（import-only） | `halign=1` | 変更なし |
+| `VAlign:<value>` | 下記参照 | 出力なし（import-only） | `valign=1` | 変更なし |
+
+`HAlign` の値: `General`、`Left`、`Center`、`Right`、`Fill`、`Justify`、`CenterAcrossSelection`、`Distributed`（大文字小文字を区別しない）。  
+`VAlign` の値: `Top`、`Center`、`Bottom`、`Justify`、`Distributed`（大文字小文字を区別しない）。
+
+**Boolean トークンのリセット動作:** Boolean import フラグ（`bold=1` 等）が有効なとき、トークンがセルのスタイル文字列に**不在**の場合は、import 時にその属性をデフォルト値にリセットします。これは export の出力方針（非デフォルト値のみ書き出す）と対称です。
+
+### マージスレーブマーカー
+
+結合セルのスレーブセルは `Value / Label` 列にマーカーが出力されます。
+
+| マーカー | 意味 |
+| :--- | :--- |
+| `!merged_left` | マスターと同行のスレーブセル（右方向に結合） |
+| `!merged_up` | マスターと同列のスレーブセル（下方向に結合） |
+| `!merged_ul` | マスターの右下にあるスレーブセル |
+
+スレーブ行は import 時にスキップされ、結合構造は別パスで再構築されます（`merge=1` が必要）。
+
+### エスケープシーケンス
+
+セル値とスタイルトークン値で以下の文字がエスケープされます。
+
+| エスケープ | 元の文字 |
+| :--- | :--- |
+| `\\` | バックスラッシュ |
+| `\n` | 改行（CR・LF・CRLF） |
+| `\v` | 垂直タブ（Chr 11） |
+| `\|` | パイプ（Markdown テーブル区切り） |
+| `\;` | セミコロン（スタイルトークン区切り ― スタイル値のみ） |
+
+Shapes フィールドでは、空欄を表すセンチネル値 `-` と区別するため、内容が文字列 `-` そのものの場合は `\-` と書き出されます。
+
+### Shapes セクション
+
+シートに図形（テキストボックス・ボタン等）がある場合、セルテーブルの後に `## Shapes` セクションが追記されます。
+
+```markdown
+## Shapes
+
+| Address | Name | Label | Formula | OnAction | Style |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| A1 | Button 1 | Click me | - | Module1.DoAction | BG:#4472C4; FG:#FFFFFF |
+```
+
+| 列 | 内容 |
+| :--- | :--- |
+| `Address` | 図形の左上にあるセルのアドレス |
+| `Name` | 図形の内部名 |
+| `Label` | 表示テキスト（なければ `-`、内容が `-` の場合は `\-`） |
+| `Formula` | リンクされたセルの数式（バッククォート囲み）。なければ `-`。 |
+| `OnAction` | 割り当てられたマクロ名。なければ `-`。 |
+| `Style` | 図形の塗りつぶし色・文字色・フォントサイズ（`BG:`・`FG:`・`FontSize:` トークン） |
+
+Import フラグ: `shapes=1`。
+
 ## 前提条件
 
 ### VBA プロジェクト オブジェクト モデルへのアクセス

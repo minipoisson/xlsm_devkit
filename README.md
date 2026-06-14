@@ -167,6 +167,114 @@ shapes=0
 
 The most impactful setting is `merge=0`: it skips `ws.Cells.UnMerge`, a blocking COM call that can take 8--15 minutes on sheets with thousands of merged regions. With `merge=0` the merged-cell structure is left intact and only cell values/formulas are updated.
 
+## Sheet Map Format
+
+Each sheet is exported to `sheet/<CodeName>.md`. The file begins with a metadata
+header, followed by a Markdown table, and optionally a Shapes section.
+
+### File header
+
+```
+# Sheet Configuration
+- VBA CodeName: Sheet1
+- Excel UI Name: Summary
+- Hidden Rows: 3, 5-7
+- Hidden Columns: B, D-F
+```
+
+`Hidden Rows` and `Hidden Columns` appear only when the sheet contains hidden rows or columns.
+
+### Cell table
+
+```markdown
+| Address | Name | Value / Label | Formula | Style |
+| :--- | :--- | :--- | :--- | :--- |
+| A1 | - | Hello | - | Bold |
+| B2 | rate | 0.05 | `=A1*0.05` | FontSize:14; NumFmt:0.00% |
+| C3 | - | !merged_left | - | - |
+```
+
+| Column | Content |
+| :--- | :--- |
+| `Address` | Cell address (e.g. `A1`, `B12`) |
+| `Name` | Named range bound to this cell; `-` if none. Sheet-scoped names include the worksheet prefix (`Sheet1!myRange`). |
+| `Value / Label` | Display value (formula result when a formula is present). For merge-slave cells, a merge marker (see below). |
+| `Formula` | The formula wrapped in backticks (`` `=A1*B1` ``); `-` if not a formula cell. |
+| `Style` | Semicolon-separated style tokens; `-` if none. |
+
+Cells with no value, no formula, and no background color are omitted from the export.
+
+### Style tokens
+
+| Token | Format | Exported when | Import flag | When absent |
+| :--- | :--- | :--- | :--- | :--- |
+| `BG:#rrggbb` | 6-digit hex | background color set | `bg=1` | unchanged |
+| `FG:#rrggbb` | 6-digit hex | font color set | `fg=1` | unchanged |
+| `FontSize:<n>` | integer pt | differs from standard font size | `font_size=1` | unchanged |
+| `Bold` | flag | `Font.Bold = True` | `bold=1` | reset to `False` |
+| `Italic` | flag | `Font.Italic = True` | `italic=1` | reset to `False` |
+| `Strike` | flag | `Font.Strikethrough = True` | `strike=1` | reset to `False` |
+| `Wrap` | flag | `WrapText = True` | `wrap=1` | reset to `False` |
+| `Unlocked` | flag | `Locked = False` | `unlocked=1` | reset to `True` (Locked) |
+| `NumFmt:<format>` | Excel format string | not `"General"` | `numfmt=1` | unchanged |
+| `List:<formula>` | e.g. `=$A$1:$A$10` | validation list present | `list=1` | unchanged |
+| `HAlign:<value>` | see below | never (import-only) | `halign=1` | unchanged |
+| `VAlign:<value>` | see below | never (import-only) | `valign=1` | unchanged |
+
+`HAlign` values: `General`, `Left`, `Center`, `Right`, `Fill`, `Justify`, `CenterAcrossSelection`, `Distributed` (case-insensitive).  
+`VAlign` values: `Top`, `Center`, `Bottom`, `Justify`, `Distributed` (case-insensitive).
+
+**Boolean-token reset behaviour:** When a boolean import flag is enabled (`bold=1`, etc.) and the token is absent from a cell's style string, the attribute is reset to its default value on import. This mirrors export semantics -- only non-default values are written.
+
+### Merge-slave markers
+
+Slave cells of a merged region appear in the cell table with a marker in the `Value / Label` column:
+
+| Marker | Meaning |
+| :--- | :--- |
+| `!merged_left` | slave cell in the same row as the master (extends right) |
+| `!merged_up` | slave cell in the same column as the master (extends down) |
+| `!merged_ul` | slave cell right of and below the master |
+
+Slave rows are skipped during import; merge geometry is rebuilt in a separate pass (`merge=1` required).
+
+### Escape sequences
+
+The following characters are escaped in cell values and style token values:
+
+| Escape | Character |
+| :--- | :--- |
+| `\\` | literal backslash |
+| `\n` | newline (CR, LF, or CRLF) |
+| `\v` | vertical tab (Chr 11) |
+| `\|` | pipe (Markdown table delimiter) |
+| `\;` | semicolon (style token delimiter -- style values only) |
+
+In Shapes fields the literal string `-` (the sentinel for "empty") is written as `\-`.
+
+### Shapes section
+
+When the sheet contains shapes (text boxes, buttons, etc.) a `## Shapes` section is appended after the cell table:
+
+```markdown
+## Shapes
+
+| Address | Name | Label | Formula | OnAction | Style |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| A1 | Button 1 | Click me | - | Module1.DoAction | BG:#4472C4; FG:#FFFFFF |
+```
+
+| Column | Content |
+| :--- | :--- |
+| `Address` | Top-left cell under the shape |
+| `Name` | Shape's internal name |
+| `Label` | Visible text (`-` if none; `\-` if the text is literally `-`) |
+| `Formula` | Linked cell formula in backticks; `-` if none |
+| `OnAction` | Assigned macro name; `-` if none |
+| `Style` | `BG:`, `FG:`, and `FontSize:` tokens for the shape |
+
+Import flag: `shapes=1`.
+
 ## Prerequisites
 
 ### Trust access to the VBA project object model
