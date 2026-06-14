@@ -1987,7 +1987,6 @@ Private Function HexToRGB(hexStr As String) As Long
 End Function
 
 Private Sub ApplyCellStyle(rng As Range, styleStr As String, cfg As ImportSettings)
-    If styleStr = "-" Or styleStr = "" Then Exit Sub
     Dim parts() As String
     Dim p As String
     Dim tokenName As String
@@ -1996,7 +1995,10 @@ Private Sub ApplyCellStyle(rng As Range, styleStr As String, cfg As ImportSettin
     Dim sep As Long
     Dim k As Long
     Dim savedMergeArea As Range
-    parts = ParseStyleTokens(styleStr)
+    Dim bv As Variant
+    If Not (styleStr = "-" Or styleStr = "") Then
+        parts = ParseStyleTokens(styleStr)
+    End If
 
     ' If rng is a slave cell in a currently-merged region, temporarily unmerge so
     ' per-cell style operations (rng.Locked, etc.) succeed.  Re-merge at the end.
@@ -2022,19 +2024,32 @@ Private Sub ApplyCellStyle(rng As Range, styleStr As String, cfg As ImportSettin
     End If
 
     ' When a boolean-attribute flag is enabled, reset to the default value before
-    ' applying tokens.  This ensures absence of a token restores the default state
-    ' (matching export semantics where non-defaults are the only emitted tokens).
-    ' ClearFormats (merge=1) already does this for every cell; this block covers
-    ' merge=0 for cells that have a non-empty style string.
-    If cfg.ImportBold    Then On Error Resume Next: rng.Font.Bold         = False: On Error GoTo 0
-    If cfg.ImportItalic  Then On Error Resume Next: rng.Font.Italic        = False: On Error GoTo 0
-    If cfg.ImportStrike  Then On Error Resume Next: rng.Font.Strikethrough = False: On Error GoTo 0
-    If cfg.ImportWrap    Then On Error Resume Next: rng.WrapText            = False: On Error GoTo 0
-    If cfg.ImportUnlocked Then
-        On Error Resume Next
-        rng.MergeArea.Locked = True
-        On Error GoTo 0
+    ' applying tokens.  Uses read-before-write: the attribute is read first and the
+    ' write is skipped when the value already equals the desired default, minimising
+    ' unnecessary COM writes.  This block now also covers cells with empty style
+    ' strings (merge=0 skips ClearFormats, so there is no other reset path for them).
+    If cfg.ImportBold Then
+        On Error Resume Next: bv = rng.Font.Bold: On Error GoTo 0
+        If bv = True Then On Error Resume Next: rng.Font.Bold = False: On Error GoTo 0
     End If
+    If cfg.ImportItalic Then
+        On Error Resume Next: bv = rng.Font.Italic: On Error GoTo 0
+        If bv = True Then On Error Resume Next: rng.Font.Italic = False: On Error GoTo 0
+    End If
+    If cfg.ImportStrike Then
+        On Error Resume Next: bv = rng.Font.Strikethrough: On Error GoTo 0
+        If bv = True Then On Error Resume Next: rng.Font.Strikethrough = False: On Error GoTo 0
+    End If
+    If cfg.ImportWrap Then
+        On Error Resume Next: bv = rng.WrapText: On Error GoTo 0
+        If bv = True Then On Error Resume Next: rng.WrapText = False: On Error GoTo 0
+    End If
+    If cfg.ImportUnlocked Then
+        On Error Resume Next: bv = rng.MergeArea.Locked: On Error GoTo 0
+        If bv = False Then On Error Resume Next: rng.MergeArea.Locked = True: On Error GoTo 0
+    End If
+
+    If styleStr = "-" Or styleStr = "" Then GoTo lblRemerge
 
     For k = 0 To UBound(parts)
         p = Trim(parts(k))
@@ -2246,6 +2261,7 @@ Private Sub ApplyCellStyle(rng As Range, styleStr As String, cfg As ImportSettin
 lblNextCellStyle:
     Next k
 
+lblRemerge:
     If Not savedMergeArea Is Nothing Then
         On Error Resume Next
         savedMergeArea.Merge

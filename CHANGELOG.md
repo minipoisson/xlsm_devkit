@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.12.0] - 2026-06-14
+
+### Fixed
+- `ApplyCellStyle`: boolean-attribute reset (`Bold`, `Italic`, `Strike`, `Wrap`,
+  `Unlocked`) now runs for cells with empty style strings when `merge=0`. Previously
+  the function exited before the reset block for empty-style cells, leaving existing
+  Excel formatting unchanged when a token was removed from the Markdown. The reset
+  now uses read-before-write: each attribute is read first and the write is skipped
+  when the value already equals the desired default, minimising unnecessary COM writes.
+
 ## [1.11.0] - 2026-06-14
 
 ### Fixed
