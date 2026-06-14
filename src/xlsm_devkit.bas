@@ -2021,6 +2021,21 @@ Private Sub ApplyCellStyle(rng As Range, styleStr As String, cfg As ImportSettin
         On Error GoTo 0
     End If
 
+    ' When a boolean-attribute flag is enabled, reset to the default value before
+    ' applying tokens.  This ensures absence of a token restores the default state
+    ' (matching export semantics where non-defaults are the only emitted tokens).
+    ' ClearFormats (merge=1) already does this for every cell; this block covers
+    ' merge=0 for cells that have a non-empty style string.
+    If cfg.ImportBold    Then On Error Resume Next: rng.Font.Bold         = False: On Error GoTo 0
+    If cfg.ImportItalic  Then On Error Resume Next: rng.Font.Italic        = False: On Error GoTo 0
+    If cfg.ImportStrike  Then On Error Resume Next: rng.Font.Strikethrough = False: On Error GoTo 0
+    If cfg.ImportWrap    Then On Error Resume Next: rng.WrapText            = False: On Error GoTo 0
+    If cfg.ImportUnlocked Then
+        On Error Resume Next
+        rng.MergeArea.Locked = True
+        On Error GoTo 0
+    End If
+
     For k = 0 To UBound(parts)
         p = Trim(parts(k))
         If p = "" Then GoTo lblNextCellStyle

@@ -142,8 +142,9 @@ By default every token in a sheet map is applied on import. To disable specific 
 ```ini
 [import]
 ; 1 = apply on import (default if key or file is absent), 0 = skip
-; Exception: unlocked defaults to 0 -- setting rng.Locked on slave cells of merged
-; ranges fails with Err 1004 when merge=0; enable only together with merge=1
+; Exception: unlocked defaults to 0 (opt-in) -- applying Locked=False to unintended
+; cells can weaken sheet protection; enable explicitly to restore lock state.
+; Works with both merge=0 and merge=1 (lazy-unmerge handles slave cells).
 value=1
 formula=1
 numfmt=1

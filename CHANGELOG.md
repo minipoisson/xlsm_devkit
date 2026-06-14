@@ -4,6 +4,22 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.11.0] - 2026-06-14
+
+### Fixed
+- `ApplyCellStyle`: when a boolean-attribute import flag is enabled (`bold=1`, `italic=1`,
+  `strike=1`, `wrap=1`, `unlocked=1`), the corresponding attribute is now reset to its
+  default value before token processing. Previously, if the token was absent from a cell's
+  style string, the existing Excel value was left unchanged, causing drift when `merge=0`
+  (since `ClearFormats` is skipped in that mode). Absence of a token is now treated as
+  "restore default" for all enabled flags, consistent with export semantics (non-defaults
+  only are emitted). For `merge=1` the reset is redundant but harmless -- `ClearFormats`
+  already performs it.
+- `xlsm_devkit.ini` / README: corrected the `unlocked=0` comment which incorrectly stated
+  "enable only together with merge=1". The `rng.MergeArea.Locked` fix and lazy-unmerge
+  introduced in v1.10.0 make `unlocked=1` + `merge=0` fully safe. The default remains `0`
+  as an opt-in safeguard against accidentally weakening sheet protection.
+
 ## [1.10.0] - 2026-06-14
 
 ### Added
