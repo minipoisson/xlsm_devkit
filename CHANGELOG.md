@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.13.0] - 2026-06-19
+
 ### Added
 - Testing harness (Phase 1 MVP): new optional module `src/devkit_Test.bas` plus a
   PowerShell runner that treats a workbook like testable code. It generates boundary
