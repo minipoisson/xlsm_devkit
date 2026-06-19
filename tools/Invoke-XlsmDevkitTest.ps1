@@ -94,7 +94,8 @@ function Get-RandomValue([System.Random]$rng) {
 function Format-InputsSummary($caseInputs) {
     ($caseInputs | ForEach-Object {
         $loc = if ($_.address) { $_.address } else { $_.range }
-        "$($_.sheet)!$loc=$($_.value) [$($_.type)]"
+        $sheetLabel = if ($_.code_name) { $_.code_name } else { $_.sheet }
+        "$sheetLabel!$loc=$($_.value) [$($_.type)]"
     }) -join '; '
 }
 
@@ -184,9 +185,9 @@ try {
     # --- 2. Resolve input targets -------------------------------------------
     $resolved = $xl.Run($runPrefix + 'DevkitResolveInputs', $metaJson) | ConvertFrom-Json
     if ($null -ne ($resolved.PSObject.Properties['error'])) { throw "DevkitResolveInputs failed: $($resolved.error)" }
-    # Normalize to plain hashtables so optional address/range are always present (as $null).
+    # Normalize to plain hashtables so optional code_name/address/range are always present (as $null).
     $normTargets = @(@(Get-Prop $resolved 'inputs') | ForEach-Object {
-        @{ sheet = $_.sheet; address = (Get-Prop $_ 'address'); range = (Get-Prop $_ 'range') }
+        @{ sheet = $_.sheet; code_name = (Get-Prop $_ 'code_name'); address = (Get-Prop $_ 'address'); range = (Get-Prop $_ 'range') }
     })
     if ($normTargets.Count -eq 0) { throw "No input cells resolved. Check meta.json roles / unlocked cells." }
     Write-Host "Resolved $($normTargets.Count) input target(s)."
@@ -199,7 +200,11 @@ try {
         $genCases = Get-Prop $gen 'cases'
         if ($caseCount -le 0 -and $genCases) { $caseCount = [int]$genCases }
         foreach ($exp in @(Get-Prop $test 'expect')) {
-            $t = @{ sheet = $exp.sheet }
+            $t = @{}
+            $expSheet = Get-Prop $exp 'sheet'
+            $expCode  = Get-Prop $exp 'code_name'
+            if ($expCode)  { $t.code_name = $expCode }
+            if ($expSheet) { $t.sheet = $expSheet }
             $expUsed = Get-Prop $exp 'used_range'
             $expRange = Get-Prop $exp 'range'
             if ($expUsed) { $t.used_range = $true }
@@ -211,6 +216,34 @@ try {
     if ($caseCount -le 0) { $caseCount = 50 }
     $assertJson = ConvertTo-Json @{ targets = @($assertTargets) } -Depth 6 -Compress
 
+    # --- 3b. Apply fixtures once, before the case loop (seed cells) ----------
+    $fixtureList = New-Object System.Collections.ArrayList
+    foreach ($test in @(Get-Prop $testSpec 'tests')) {
+        foreach ($fx in @(Get-Prop $test 'fixtures')) {
+            $fxObj = @{}
+            $fxSheet = Get-Prop $fx 'sheet'
+            $fxCode  = Get-Prop $fx 'code_name'
+            if ($fxCode)  { $fxObj.code_name = $fxCode }
+            if ($fxSheet) { $fxObj.sheet = $fxSheet }
+            $fxMd = Get-Prop $fx 'md'
+            $fxMdFile = Get-Prop $fx 'md_file'
+            if ($fxMdFile) {
+                $fxPath = if ([System.IO.Path]::IsPathRooted($fxMdFile)) { $fxMdFile } else { Join-Path $wbFolder $fxMdFile }
+                if (-not (Test-Path -LiteralPath $fxPath)) { throw "fixture md_file not found: $fxPath" }
+                # Cast to plain [string]: Get-Content -Raw attaches PSPath/PSProvider note
+                # properties that ConvertTo-Json would otherwise serialize as an object.
+                $fxMd = [string](Get-Content -LiteralPath $fxPath -Raw -Encoding UTF8)
+            }
+            if ($fxMd) { $fxObj.md = $fxMd; [void]$fixtureList.Add($fxObj) }
+        }
+    }
+    if ($fixtureList.Count -gt 0) {
+        $fixtureJson = ConvertTo-Json @{ fixtures = @($fixtureList) } -Depth 6 -Compress
+        $fxRes = $xl.Run($runPrefix + 'DevkitApplyFixture', $fixtureJson) | ConvertFrom-Json
+        if ($null -ne ($fxRes.PSObject.Properties['error'])) { throw "DevkitApplyFixture failed: $($fxRes.error)" }
+        Write-Host "Applied fixtures: $($fxRes.applied) cell(s)."
+    }
+
     # --- 4. Generate cases (boundary sweep, then random) --------------------
     if ($Seed -eq 0) { $rng = New-Object System.Random } else { $rng = New-Object System.Random($Seed) }
     $boundary = Get-BoundarySet
@@ -220,7 +253,7 @@ try {
     for ($j = 0; $j -lt $boundary.Count -and $caseList.Count -lt $caseCount; $j++) {
         $ci = @()
         foreach ($tg in $normTargets) {
-            $ci += @{ sheet = $tg.sheet; address = $tg.address; range = $tg.range;
+            $ci += @{ sheet = $tg.sheet; code_name = $tg.code_name; address = $tg.address; range = $tg.range;
                       value = $boundary[$j].value; type = $boundary[$j].type }
         }
         [void]$caseList.Add($ci)
@@ -231,7 +264,7 @@ try {
         foreach ($tg in $normTargets) {
             if ($rng.Next(0, 100) -lt 30) { $pick = $boundary[$rng.Next(0, $boundary.Count)] }
             else { $pick = Get-RandomValue $rng }
-            $ci += @{ sheet = $tg.sheet; address = $tg.address; range = $tg.range;
+            $ci += @{ sheet = $tg.sheet; code_name = $tg.code_name; address = $tg.address; range = $tg.range;
                       value = $pick.value; type = $pick.type }
         }
         [void]$caseList.Add($ci)
@@ -244,9 +277,11 @@ try {
     foreach ($ci in $caseList) {
         $caseNo++
         $applyInputs = @($ci | ForEach-Object {
-            $o = @{ sheet = $_.sheet; value = $_.value; type = $_.type }
-            if ($_.address) { $o.address = $_.address }
-            if ($_.range)   { $o.range = $_.range }
+            $o = @{ value = $_.value; type = $_.type }
+            if ($_.code_name) { $o.code_name = $_.code_name }
+            if ($_.sheet)     { $o.sheet = $_.sheet }
+            if ($_.address)   { $o.address = $_.address }
+            if ($_.range)     { $o.range = $_.range }
             $o
         })
         $applyJson = ConvertTo-Json @{ inputs = $applyInputs } -Depth 6 -Compress

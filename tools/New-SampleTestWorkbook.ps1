@@ -8,8 +8,9 @@
       - Sheet "Result" : formulas that reference Input, including two that can error:
             B2 = Input!B3 / Input!B2          -> #DIV/0! when quantity is 0 / blank
             B3 = VLOOKUP(Input!B2, table, ..) -> #N/A   when quantity is not 1/2/3
-      - Imports src\devkit_Test.bas into the workbook's VBProject so the runner can
-        call the Devkit* API via Application.Run.
+      - Imports src\xlsm_devkit.bas and src\devkit_Test.bas into the workbook's VBProject
+        so the runner can call the Devkit* API via Application.Run. (devkit_Test reuses
+        Public helpers from xlsm_devkit.bas, so both modules must be present.)
 
     ASCII-only sheet names (the role mechanism is language-independent), which keeps
     PowerShell free of encoding pitfalls.
@@ -31,7 +32,11 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
+# devkit_Test reuses Public helpers from xlsm_devkit.bas (ParseMDTableRow,
+# UnescapeCellValue), so the core module must be present in the workbook too.
+$coreSrc = Join-Path $repoRoot 'src\xlsm_devkit.bas'
 $moduleSrc = Join-Path $repoRoot 'src\devkit_Test.bas'
+if (-not (Test-Path -LiteralPath $coreSrc)) { throw "xlsm_devkit.bas not found: $coreSrc" }
 if (-not (Test-Path -LiteralPath $moduleSrc)) { throw "devkit_Test.bas not found: $moduleSrc" }
 
 if ([string]::IsNullOrWhiteSpace($OutPath)) {
@@ -79,19 +84,24 @@ try {
     $wsRes.Range('A2').Value2 = 'Price per unit (div)'
     $wsRes.Range('A3').Value2 = 'Tier lookup'
     $wsRes.Range('A4').Value2 = 'Total'
+    $wsRes.Range('A6').Value2 = 'Fixture-dependent (1/H1)'
     $wsRes.Range('B2').Formula = '=Input!B3/Input!B2'
     $wsRes.Range('B3').Formula = '=VLOOKUP(Input!B2,$E$2:$F$4,2,FALSE)'
     $wsRes.Range('B4').Formula = '=Input!B2*Input!B3'
+    # B6 errors (#DIV/0!) unless a fixture seeds H1 before the run -- demonstrates DevkitApplyFixture.
+    $wsRes.Range('B6').Formula = '=1/Result!H1'
     # Small lookup table for the VLOOKUP (tiers 1/2/3 only -> other quantities give #N/A).
     $wsRes.Range('E2').Value2 = 1; $wsRes.Range('F2').Value2 = 10
     $wsRes.Range('E3').Value2 = 2; $wsRes.Range('F3').Value2 = 20
     $wsRes.Range('E4').Value2 = 3; $wsRes.Range('F4').Value2 = 30
 
-    # --- Import the test module into the VBProject ---------------------------
+    # --- Import the core + test modules into the VBProject -------------------
+    # Core first: devkit_Test calls its Public ParseMDTableRow / UnescapeCellValue.
     try {
+        $null = $wb.VBProject.VBComponents.Import($coreSrc)
         $null = $wb.VBProject.VBComponents.Import($moduleSrc)
     } catch {
-        throw "Could not import devkit_Test.bas into the VBProject. Enable " +
+        throw "Could not import modules into the VBProject. Enable " +
               "'Trust access to the VBA project object model' in Excel Trust Center. " +
               "Underlying error: $($_.Exception.Message)"
     }

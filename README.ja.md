@@ -90,7 +90,10 @@ Excel エラー（`#DIV/0!`, `#N/A` など）が出ないか」**。
 - 標準の Windows PowerShell のみで完結（Python・外部モジュール不要）。
 - 仕様は JSON（`tests/workbook.meta.json`, `tests/no_error.test.json`）、結果は
   `test-results/latest/result.{json,md}` に出力。
-- 原本ブックは一切変更しません（毎回一時コピーで実行）。
+- シートはタブ名（`sheet`）または VBA の `code_name` で指定可能。テスト前に Markdown の
+  `fixtures` でセルへ値・数式を流し込めます。
+- 原本ブックは一切変更しません（毎回ブックフォルダ内の作業コピーで実行＝ブックの信頼できる
+  場所を継承）。
 
 ```powershell
 .\tools\New-SampleTestWorkbook.ps1                                   # サンプル生成（開発時のみ）

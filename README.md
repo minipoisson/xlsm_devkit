@@ -92,7 +92,10 @@ free of Excel errors (`#DIV/0!`, `#N/A`, ...)?**
 - Standard Windows PowerShell only — no Python, no external modules.
 - Specs are JSON (`tests/workbook.meta.json`, `tests/no_error.test.json`); results are
   written to `test-results/latest/result.{json,md}`.
-- The original workbook is never modified (every run uses a temp copy).
+- Sheets can be referenced by tab name (`sheet`) or VBA `code_name`; tests can seed cells
+  before the run via Markdown `fixtures`.
+- The original workbook is never modified (every run uses a work copy under the workbook
+  folder, so it inherits the workbook's Excel trusted location).
 
 ```powershell
 .\tools\New-SampleTestWorkbook.ps1                                   # build a sample (dev only)

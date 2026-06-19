@@ -1764,7 +1764,8 @@ Private Function ReadUTF8(filePath As String) As String
     st.Close
 End Function
 
-Private Function ParseMDTableRow(line As String) As String()
+' Public so optional modules (e.g. devkit_Test) can reuse Markdown table parsing.
+Public Function ParseMDTableRow(line As String) As String()
     ' "| A1 | name | value | formula | style |" -> Array("A1","name","value","formula","style")
     Dim s As String
     s = line
@@ -1816,7 +1817,8 @@ Private Function TrimMDTableField(v As String) As String
     TrimMDTableField = v
 End Function
 
-Private Function UnescapeCellValue(v As String) As String
+' Public so optional modules (e.g. devkit_Test) can reuse cell-value unescaping.
+Public Function UnescapeCellValue(v As String) As String
     Dim result As String
     Dim i As Long
     Dim ch As String

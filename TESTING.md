@@ -47,7 +47,19 @@ All functions are non-interactive and take/return a JSON string.
 | `DevkitApplyInputs(inputsJson)` | Write values into target cells (with a `blank`/`text`/`number` type hint) |
 | `DevkitCalculateFullRebuild()` | `Application.CalculateFullRebuild` |
 | `DevkitAssertNoErrors(targetJson)` | Scan target ranges / `used_range` for Excel error values |
+| `DevkitApplyFixture(fixtureJson)` | Seed cells with values/formulas from a Markdown table before the run (non-destructive) |
 | `DevkitWriteResult(resultJson)` | Write `result.json` + `result.md` to a given output folder |
+
+## Sheet references (`sheet` vs `code_name`)
+
+Anywhere a sheet is referenced (meta sheet definitions, `expect` targets, fixtures), you
+may identify it by either:
+
+- `"sheet": "Result"` — the tab display name, or
+- `"code_name": "Sheet2"` — the VBA CodeName.
+
+Use `code_name` when tab names can collide or change. When both are present the CodeName
+wins. `DevkitResolveInputs` returns both for each input so downstream calls are unambiguous.
 
 ## File layout (in a real workbook folder)
 
@@ -57,15 +69,18 @@ All functions are non-interactive and take/return a JSON string.
   tests/
     workbook.meta.json               # cell role definitions
     no_error.test.json               # the property test
+    fixtures/
+      seed.md                        # optional fixture sheet-map tables
   test-results/
     latest/
       result.json
       result.md
+    work/                            # transient work copy of the workbook (auto-cleaned)
   tools/
     Invoke-XlsmDevkitTest.ps1
 ```
 
-`test-results/` is generated output (gitignored). `tests/*.json` are authored specs.
+`test-results/` is generated output (gitignored). `tests/*` are authored specs.
 
 ## `workbook.meta.json`
 
@@ -92,6 +107,9 @@ protected sheets) so you usually do not enumerate them by hand.
     {
       "name": "No Excel error on the Result sheet for any input",
       "type": "property",
+      "fixtures": [
+        { "sheet": "Result", "md_file": "tests/fixtures/seed.md" }
+      ],
       "inputs": [ { "role": "input" } ],
       "generate": { "strategy": "boundary_and_random", "cases": 50 },
       "expect": [ { "sheet": "Result", "used_range": true, "assert": "no_error" } ]
@@ -104,6 +122,26 @@ Boundary values exercised include: blank, `0`, `-1`, a large number, a decimal, 
 long string, a numeric-looking string, a date-like string, and whitespace; random
 values fill the remaining cases. Detected Excel errors:
 `#DIV/0! #N/A #VALUE! #REF! #NAME? #NUM! #NULL! #SPILL! #CALC!`.
+
+## Fixtures (seed cells before the run)
+
+A test may declare `fixtures` that set specific cells **once, before the case loop** —
+useful for static context a formula depends on (lookup tables, mode flags, parameters).
+Each fixture references a sheet (`sheet` or `code_name`) and supplies a Markdown
+sheet-map table, either inline (`md`) or from a file (`md_file`, relative to the workbook
+folder). Only the listed cells are written — it is **non-destructive** (no clearing of
+surrounding cells, formats, or validation).
+
+```markdown
+| Address | Name | Value | Formula | Style |
+|---------|------|-------|---------|-------|
+| H1      |      | 5     |         |       |
+| H2      |      |       | =H1*2   |       |
+```
+
+A formula (column 4) takes priority over a literal value (column 3), matching the core
+sheet-map import. The Style column is ignored by fixtures (value/formula only). You can
+paste a slice of an existing `sheet/*.md` straight into a fixture file.
 
 ## Running
 
@@ -124,10 +162,15 @@ The runner exits `1` when any case fails (so it slots into CI), and always write
 ### Requirements
 
 - Excel must be installed (the runner drives it through COM).
-- The workbook must contain `devkit_Test.bas`.
+- The workbook must contain `devkit_Test.bas`. Fixtures additionally require the core
+  `xlsm_devkit.bas` module in the same workbook (it provides the reused `ParseMDTableRow`
+  / `UnescapeCellValue` helpers) -- normal dev workbooks already have it.
 - Building the sample workbook requires *Trust access to the VBA project object model*
   (Excel Options > Trust Center > Macro Settings).
-- The original workbook is never modified -- every run operates on a temp copy.
+- The original workbook is never modified -- every run operates on a **work copy** placed
+  under `test-results/work/` next to the workbook. This keeps the copy inside the
+  workbook's Excel **trusted location** so macros run; the system temp folder is usually
+  not trusted. Ensure the trusted location is set to **include subfolders**.
 
 ## Roadmap (beyond Phase 1)
 

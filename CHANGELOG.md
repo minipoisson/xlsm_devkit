@@ -12,12 +12,29 @@ All notable changes to this project will be documented in this file.
   JSON in/out (`DevkitTestPing`, `DevkitResolveInputs`, `DevkitApplyInputs`,
   `DevkitCalculateFullRebuild`, `DevkitAssertNoErrors`, `DevkitWriteResult`).
   Standard Windows PowerShell only -- no Python or external modules.
-  - `tools/Invoke-XlsmDevkitTest.ps1` -- orchestrator (temp copy, COM, generation, cleanup)
+  - `tools/Invoke-XlsmDevkitTest.ps1` -- orchestrator (work copy, COM, generation, cleanup)
   - `tools/New-SampleTestWorkbook.ps1` -- builds a sample workbook for verification
-  - `examples/test-harness/tests/*.json` -- meta/role + `no_error` test templates
+  - `examples/test-harness/tests/*.json` + `tests/fixtures/*.md` -- meta/role, `no_error`
+    test, and fixture templates
   - `TESTING.md` -- harness reference; README (EN/JA) sections added
   - The module carries the `devkit_` prefix, so it is auto-skipped on import/export and
-    stripped from released workbooks by existing machinery (no core changes).
+    stripped from released workbooks by existing machinery.
+- Testing harness: sheet references now accept `code_name` (VBA CodeName) in addition to
+  `sheet` (tab display name), disambiguating sheets whose tab names collide. The CodeName
+  takes priority when both are present; `DevkitResolveInputs` echoes both.
+- Testing harness: test fixtures (`DevkitApplyFixture`). A test spec may seed cells with
+  values/formulas before the run via a `fixtures` block referencing a Markdown sheet-map
+  table (`md_file` or inline `md`). Application is non-destructive (only listed cells are
+  written; no ClearContents/ClearFormats). Reuses the core Markdown helpers.
+- Testing harness: the work copy is placed under the workbook folder (`test-results/work`)
+  instead of the system temp folder, so it inherits the workbook's Excel trusted location
+  (the system temp folder is usually not trusted, which blocks macros). The runner also
+  lowers `Application.AutomationSecurity` for the explicit local test copy.
+
+### Changed
+- `xlsm_devkit.bas`: `ParseMDTableRow` and `UnescapeCellValue` are now `Public` so optional
+  modules (e.g. `devkit_Test`) can reuse Markdown table parsing / cell-value unescaping.
+  No behavioural change to existing import/export.
 
 ## [1.12.0] - 2026-06-14
 

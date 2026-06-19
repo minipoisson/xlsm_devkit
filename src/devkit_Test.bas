@@ -75,7 +75,11 @@ Public Function DevkitResolveInputs(ByVal metaJson As String) As String
             If sdef.Exists("role") Then role = CStr(sdef("role"))
 
             Dim ws As Worksheet
-            Set ws = GetSheetByName(CStr(k))
+            If sdef.Exists("code_name") Then
+                Set ws = GetSheetByCodeName(CStr(sdef("code_name")))
+            Else
+                Set ws = GetSheetByName(CStr(k))
+            End If
             If Not ws Is Nothing Then
                 ' explicit input ranges
                 If sdef.Exists("inputs") Then
@@ -84,7 +88,7 @@ Public Function DevkitResolveInputs(ByVal metaJson As String) As String
                     For ii = 1 To arr.Count
                         Dim it As Object: Set it = arr(ii)
                         If it.Exists("range") Then
-                            AppendInput sb, first, CStr(k), "", CStr(it("range")), ""
+                            AppendInput sb, first, ws.Name, ws.CodeName, "", CStr(it("range")), ""
                         End If
                     Next ii
                 End If
@@ -93,7 +97,7 @@ Public Function DevkitResolveInputs(ByVal metaJson As String) As String
                     Dim c As Range
                     For Each c In ws.UsedRange.Cells
                         If c.Locked = False Then
-                            AppendInput sb, first, CStr(k), _
+                            AppendInput sb, first, ws.Name, ws.CodeName, _
                                 c.Address(False, False), "", CStr(c.Text)
                         End If
                     Next c
@@ -121,9 +125,9 @@ Public Function DevkitApplyInputs(ByVal inputsJson As String) As String
     Dim i As Long
     For i = 1 To arr.Count
         Dim it As Object: Set it = arr(i)
-        Dim ws As Worksheet: Set ws = GetSheetByName(CStr(it("sheet")))
+        Dim ws As Worksheet: Set ws = ResolveSheetRef(it)
         If ws Is Nothing Then
-            AppendSkip skipped, sfirst, CStr(it("sheet")), "", "sheet not found"
+            AppendSkip skipped, sfirst, SheetRefLabel(it), "", "sheet not found"
         Else
             Dim target As Range
             Set target = Nothing
@@ -136,7 +140,7 @@ Public Function DevkitApplyInputs(ByVal inputsJson As String) As String
             On Error GoTo EH
 
             If target Is Nothing Then
-                AppendSkip skipped, sfirst, CStr(it("sheet")), "", "bad address"
+                AppendSkip skipped, sfirst, SheetRefLabel(it), "", "bad address"
             Else
                 Dim vtype As String: vtype = ""
                 If it.Exists("type") Then vtype = LCase(CStr(it("type")))
@@ -146,7 +150,7 @@ Public Function DevkitApplyInputs(ByVal inputsJson As String) As String
                 If ApplyValueToRange(target, vtype, vval) Then
                     applied = applied + 1
                 Else
-                    AppendSkip skipped, sfirst, CStr(it("sheet")), _
+                    AppendSkip skipped, sfirst, SheetRefLabel(it), _
                         target.Address(False, False), "write failed (locked?)"
                 End If
             End If
@@ -186,7 +190,7 @@ Public Function DevkitAssertNoErrors(ByVal targetJson As String) As String
     Dim i As Long
     For i = 1 To arr.Count
         Dim it As Object: Set it = arr(i)
-        Dim ws As Worksheet: Set ws = GetSheetByName(CStr(it("sheet")))
+        Dim ws As Worksheet: Set ws = ResolveSheetRef(it)
         If Not ws Is Nothing Then
             Dim rng As Range
             If it.Exists("used_range") And HasTrue(it, "used_range") Then
@@ -252,6 +256,67 @@ EH:
     DevkitWriteResult = JsonErr(Err.Description)
 End Function
 
+' Applies one or more fixtures BEFORE a test run: seed specific cells with values
+' or formulas. Each fixture supplies a sheet reference (code_name / sheet) plus a
+' Markdown sheet-map table ("md"); only the listed cells are written (NON-destructive
+' -- no ClearContents / ClearFormats / Validation.Delete). Reuses the core Markdown
+' helpers ParseMDTableRow and UnescapeCellValue from xlsm_devkit.bas.
+'   fixtureJson:
+'     { "fixtures": [ { "code_name": "Sheet2",
+'                       "md": "| Address | Name | Value | Formula | Style |\n...| B2 | | 5 | | |" } ] }
+Public Function DevkitApplyFixture(ByVal fixtureJson As String) As String
+    On Error GoTo EH
+    Dim payload As Object: Set payload = JsonParse(fixtureJson)
+    Dim arr As Object: Set arr = payload("fixtures")
+
+    Dim applied As Long: applied = 0
+    Dim skipped As String: skipped = ""
+    Dim sfirst As Boolean: sfirst = True
+
+    Dim fi As Long
+    For fi = 1 To arr.Count
+        Dim fx As Object: Set fx = arr(fi)
+        Dim ws As Worksheet: Set ws = ResolveSheetRef(fx)
+        If ws Is Nothing Then
+            AppendSkip skipped, sfirst, SheetRefLabel(fx), "", "sheet not found"
+        Else
+            Dim md As String: md = ""
+            If fx.Exists("md") Then md = CStr(fx("md"))
+            Dim lines() As String
+            lines = Split(Replace(Replace(md, vbCrLf, vbLf), vbCr, vbLf), vbLf)
+            Dim li As Long
+            For li = 0 To UBound(lines)
+                Dim ln As String: ln = Trim(lines(li))
+                If Len(ln) > 0 And Left(ln, 1) = "|" Then
+                    Dim fields() As String
+                    fields = ParseMDTableRow(ln)    ' Public in xlsm_devkit.bas
+                    If UBound(fields) >= 0 Then
+                        Dim addr As String: addr = Trim(fields(0))
+                        If Not IsHeaderOrSeparatorRow(addr) Then
+                            ' Trim alignment padding (hand-authored tables may pad columns
+                            ' with multiple spaces; the core field trim only strips one).
+                            Dim cValue As String: cValue = ""
+                            Dim cFormula As String: cFormula = ""
+                            If UBound(fields) >= 2 Then cValue = Trim(fields(2))
+                            If UBound(fields) >= 3 Then cFormula = Trim(fields(3))
+                            If ApplyFixtureCell(ws, addr, cValue, cFormula) Then
+                                applied = applied + 1
+                            Else
+                                AppendSkip skipped, sfirst, SheetRefLabel(fx), addr, "write failed / bad address"
+                            End If
+                        End If
+                    End If
+                End If
+            Next li
+        End If
+    Next fi
+
+    DevkitApplyFixture = "{""applied"":" & applied & ",""skipped"":[" & skipped & "]}"
+    Exit Function
+EH:
+    DevkitApplyFixture = JsonErr(Err.Description)
+End Function
+
 ' =====================================================================
 ' Worksheet / value helpers
 ' =====================================================================
@@ -265,6 +330,42 @@ Private Function GetSheetByName(ByVal nm As String) As Worksheet
         End If
     Next ws
     Set GetSheetByName = Nothing
+End Function
+
+Private Function GetSheetByCodeName(ByVal nm As String) As Worksheet
+    Dim ws As Worksheet
+    For Each ws In ThisWorkbook.Worksheets
+        If StrComp(ws.CodeName, nm, vbTextCompare) = 0 Then
+            Set GetSheetByCodeName = ws
+            Exit Function
+        End If
+    Next ws
+    Set GetSheetByCodeName = Nothing
+End Function
+
+' Resolves a worksheet from a reference dict carrying "code_name" and/or "sheet".
+' The VBA CodeName takes priority when present (it is collision-free with tab names).
+Private Function ResolveSheetRef(ByVal d As Object) As Worksheet
+    If d.Exists("code_name") Then
+        Set ResolveSheetRef = GetSheetByCodeName(CStr(d("code_name")))
+        If Not ResolveSheetRef Is Nothing Then Exit Function
+    End If
+    If d.Exists("sheet") Then
+        Set ResolveSheetRef = GetSheetByName(CStr(d("sheet")))
+        Exit Function
+    End If
+    Set ResolveSheetRef = Nothing
+End Function
+
+' Human-readable label for a sheet reference, for skip/diagnostic messages.
+Private Function SheetRefLabel(ByVal d As Object) As String
+    If d.Exists("code_name") Then
+        SheetRefLabel = CStr(d("code_name"))
+    ElseIf d.Exists("sheet") Then
+        SheetRefLabel = CStr(d("sheet"))
+    Else
+        SheetRefLabel = ""
+    End If
 End Function
 
 Private Function IsInputRole(ByVal role As String) As Boolean
@@ -302,12 +403,53 @@ Private Function ApplyValueToRange(ByVal target As Range, ByVal vtype As String,
     ApplyValueToRange = ok
 End Function
 
+' True for the Markdown table header row ("| Address | ... |") or a separator row
+' ("|---|---|"), so fixture application skips them rather than treating them as cells.
+Private Function IsHeaderOrSeparatorRow(ByVal addr As String) As Boolean
+    If Len(addr) = 0 Then IsHeaderOrSeparatorRow = True: Exit Function
+    If LCase(addr) = "address" Then IsHeaderOrSeparatorRow = True: Exit Function
+    Dim i As Long, ch As String
+    For i = 1 To Len(addr)
+        ch = Mid(addr, i, 1)
+        If ch <> "-" And ch <> ":" And ch <> " " Then Exit Function
+    Next i
+    IsHeaderOrSeparatorRow = True    ' only dashes/colons/spaces -> separator row
+End Function
+
+' Applies one fixture cell (value/formula only, non-destructive), mirroring the core
+' import precedence: a formula wins over a literal value. Returns False on bad address
+' or a write error. Reuses xlsm_devkit's Public UnescapeCellValue.
+Private Function ApplyFixtureCell(ByVal ws As Worksheet, ByVal addr As String, _
+                                  ByVal cValue As String, ByVal cFormula As String) As Boolean
+    Dim target As Range
+    Set target = Nothing
+    On Error Resume Next
+    Set target = ws.Range(addr)
+    On Error GoTo 0
+    If target Is Nothing Then Exit Function
+
+    Dim ok As Boolean: ok = True
+    On Error Resume Next
+    Err.Clear
+    If cFormula <> "-" And cFormula <> "" Then
+        Dim fml As String: fml = cFormula
+        If Left(fml, 1) = "`" And Right(fml, 1) = "`" Then fml = Mid(fml, 2, Len(fml) - 2)
+        target.Formula = UnescapeCellValue(fml)
+    ElseIf cValue <> "-" And cValue <> "" Then
+        target.Value = UnescapeCellValue(cValue)
+    End If
+    If Err.Number <> 0 Then ok = False
+    On Error GoTo 0
+    ApplyFixtureCell = ok
+End Function
+
 Private Sub AppendInput(ByRef sb As String, ByRef first As Boolean, _
-                        ByVal sheet As String, ByVal addr As String, _
+                        ByVal sheet As String, ByVal codeName As String, ByVal addr As String, _
                         ByVal rng As String, ByVal current As String)
     If Not first Then sb = sb & ","
     first = False
     sb = sb & "{""sheet"":" & JsonStr(sheet)
+    If Len(codeName) > 0 Then sb = sb & ",""code_name"":" & JsonStr(codeName)
     If Len(addr) > 0 Then sb = sb & ",""address"":" & JsonStr(addr)
     If Len(rng) > 0 Then sb = sb & ",""range"":" & JsonStr(rng)
     sb = sb & ",""current"":" & JsonStr(current) & "}"

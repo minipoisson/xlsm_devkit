@@ -3,6 +3,9 @@
     {
       "name": "No Excel error on the Result sheet for any input",
       "type": "property",
+      "fixtures": [
+        { "sheet": "Result", "md_file": "tests/fixtures/seed.md" }
+      ],
       "inputs": [
         { "role": "input" }
       ],
