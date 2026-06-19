@@ -82,7 +82,7 @@ SetLang "ja"   ' switch to Japanese
 SetLang ""     ' revert to system auto-detection
 ```
 
-### Testing harness (experimental, Phase 1 MVP)
+### Testing harness
 
 Treat a workbook like testable code. The optional `devkit_Test.bas` module plus a
 PowerShell runner answer a high-value question: **no matter what boundary, blank,

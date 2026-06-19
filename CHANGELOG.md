@@ -7,7 +7,7 @@ All notable changes to this project will be documented in this file.
 ## [1.13.0] - 2026-06-19
 
 ### Added
-- Testing harness (Phase 1 MVP): new optional module `src/devkit_Test.bas` plus a
+- Testing harness: new optional module `src/devkit_Test.bas` plus a
   PowerShell runner that treats a workbook like testable code. It generates boundary
   and random inputs into a temp copy and asserts that the result sheet stays free of
   Excel errors (`no_error` property check). All VBA API is non-interactive and uses
@@ -37,6 +37,13 @@ All notable changes to this project will be documented in this file.
 - `xlsm_devkit.bas`: `ParseMDTableRow` and `UnescapeCellValue` are now `Public` so optional
   modules (e.g. `devkit_Test`) can reuse Markdown table parsing / cell-value unescaping.
   No behavioural change to existing import/export.
+- Docs: testing-harness sections no longer carry an "experimental / Phase 1 MVP" label;
+  the full phase roadmap now lives in `TESTING.md`.
+
+### Fixed
+- `InitDevMode` and the import-complete dialog now localize their `MsgBox` text via `t()`
+  (previously hardcoded English: "Failed to import component", "Success/Failed/Skipped"
+  labels). New `msg.*` keys added to all 27 language files.
 
 ## [1.12.0] - 2026-06-14
 

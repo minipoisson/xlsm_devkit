@@ -204,8 +204,10 @@ lblNext:
     Next srcFile
 
     Dim msg As String
-    msg = t("msg.import_complete", "Import complete.") & vbLf & "Success: " & successCount & vbLf & "Failed: " & failCount
-    If skipCount > 0 Then msg = msg & vbLf & "Skipped (in use): " & skipCount
+    msg = t("msg.import_complete", "Import complete.") & vbLf & _
+          Fmt(t("msg.import_count_success", "Success: {0}"), successCount) & vbLf & _
+          Fmt(t("msg.import_count_failed", "Failed: {0}"), failCount)
+    If skipCount > 0 Then msg = msg & vbLf & Fmt(t("msg.import_count_skipped", "Skipped (in use): {0}"), skipCount)
     MsgBox msg, IIf(failCount = 0, vbInformation, vbExclamation)
 End Sub
 
@@ -2850,7 +2852,7 @@ Private Sub InitDevMode()
             fBase = fso.GetBaseName(f.Path)
             If LCase(Left(fBase, 7)) = "devkit_" And (fExt = "bas" Or fExt = "frm") Then
                 If Not ImportComponentIntoProject(devWb.VBProject, f.Path) Then
-                    MsgBox "Failed to import component: " & f.Name, vbExclamation
+                    MsgBox Fmt(t("msg.init_import_failed", "Failed to import component: {0}"), f.Name), vbExclamation
                 End If
 
             End If
@@ -2864,7 +2866,7 @@ Private Sub InitDevMode()
         devkitBasPath = srcDir & "\xlsm_devkit.bas"
         If fso.FileExists(devkitBasPath) Then
             If Not ImportComponentIntoProject(devWb.VBProject, devkitBasPath) Then
-                MsgBox "Failed to import component: xlsm_devkit.bas", vbExclamation
+                MsgBox Fmt(t("msg.init_import_failed", "Failed to import component: {0}"), "xlsm_devkit.bas"), vbExclamation
             End If
         End If
     End If

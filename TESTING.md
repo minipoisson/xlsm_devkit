@@ -172,9 +172,24 @@ The runner exits `1` when any case fails (so it slots into CI), and always write
   workbook's Excel **trusted location** so macros run; the system temp folder is usually
   not trusted. Ensure the trusted location is set to **include subfolders**.
 
-## Roadmap (beyond Phase 1)
+## Roadmap (Phases 1-6)
 
-`scenario` tests + `blank`/`equals`/`not_blank` assertions (Phase 2) -> richer
-property-based testing (Phase 3) -> snapshot regression via the existing sheet-map
-export (Phase 4) -> AI test-generation prompts (Phase 5) -> optional Python/pytest
-drivers reusing the same JSON specs (Phase 6).
+The harness is built in phases; each phase is independently useful. The JSON specs and
+the VBA public API are stable across phases, so later phases extend rather than replace.
+
+- **Phase 1 (MVP) -- implemented.** Cell role definitions (`workbook.meta.json`) plus the
+  `no_error` property check. This release also adds `code_name` sheet references and
+  Markdown fixtures.
+- **Phase 2 -- planned.** Fixed-scenario tests (`scenario` type) and the assertions
+  `blank` / `not_blank` / `equals` / `not_contains` (e.g. "for male patients, the
+  obstetrics result cell must be blank").
+- **Phase 3 -- planned.** Full property-based testing: `within_range`, `matches_regex`,
+  `all_blank_or_hidden`, plus failing-case shrinking.
+- **Phase 4 -- planned.** Snapshot regression using the existing sheet-map export
+  (`CallExportAllSheetMapsToMD`): `same_as_snapshot`, `changed_only_in_allowed_ranges`,
+  combined with Git diff to judge whether a change moved expected values.
+- **Phase 5 -- planned.** AI test-generation: emit a prompt/runbook (like InsertDelete /
+  Move) that hands `sheet/*.md` + meta to an AI to propose `*.test.yaml`/`.json` cases.
+- **Phase 6 -- planned.** Python / pytest interop. The specs are language-neutral, so a
+  pytest adapter only needs to call the same public API via `Application.Run` (pywin32);
+  PowerShell remains the primary, zero-install driver.
