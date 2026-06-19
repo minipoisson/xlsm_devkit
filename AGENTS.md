@@ -93,7 +93,7 @@ When `xlsm_devkit.bas` has changed since the last release, create a new GitHub r
    git tag vX.Y.Z
    git push origin main
    git push origin vX.Y.Z
-   gh release create vX.Y.Z "xlsm_devkit.bas#xlsm_devkit.bas" \
+   gh release create vX.Y.Z "src/xlsm_devkit.bas#xlsm_devkit.bas" \
      --title "vX.Y.Z" \
      --notes "<content of the new CHANGELOG section>"
    ```
