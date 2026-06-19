@@ -8,6 +8,7 @@ src/Sheet*.bas
 src/*.log
 sheet/
 SESSION_BOOTSTRAP.md
+SESSION_PROMPTS.md
 .continue/
 *.log
 test-results/
