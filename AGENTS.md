@@ -127,3 +127,16 @@ When `xlsm_devkit.bas` has changed since the last release, create a new GitHub r
    ```
 
 4. **Always attach `xlsm_devkit.bas`** as a release asset so users can download it directly without cloning the repository.
+
+---
+
+## Session load token
+
+This file is the canonical rule set and must be in context every session (Claude Code
+auto-loads it via `CLAUDE.md`'s `@AGENTS.md` import; other tools read it directly). The
+line below is a load canary: the SESSION_BOOTSTRAP.md startup handshake asks the assistant
+to quote it. If the assistant cannot quote this token from context, AGENTS.md was not
+loaded -- inspect with `/memory` (Claude Code) or restart the session. Keep this as the
+last line of the file so a correct quote also evidences a full load.
+
+`AGENTS-LOAD-TOKEN: af39c7`
