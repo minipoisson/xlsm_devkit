@@ -129,7 +129,8 @@ Key points:
 
 ## Diagnostics
 
-`IMPORT_DIAGNOSTICS_ENABLED` constant at line 32 of `xlsm_devkit.bas`.
+Module-level `Private Const IMPORT_DIAGNOSTICS_ENABLED` near the top of
+`xlsm_devkit.bas` (grep the symbol name; do not rely on a line number).
 
 - Production value: `False`
 - Enable only in a separate test project; never commit `True` to this repository.
@@ -149,3 +150,32 @@ These are recorded to prevent revisiting the same dead ends.
 | `Application.Union` accumulated in a loop for merge reconstruction | O(n^2) COM calls; triggers `RPC_E_DISCONNECTED` on large sheets | Use a 3-call bounding-box approach instead |
 | `ws.Range(addr)` in Pass 0 / Pass 1 / `ReconstructMerges` | Each call is a COM round-trip; scales poorly | Pure-string address helpers (`AddrRowNum`, `AddrColNum`, `CellAddrStr`) -- zero COM in Pass 0 |
 | Legacy VBA file functions (`Dir`, `Kill`, `Open`, `FreeFile`, `MkDir`, etc.) | Unreliable on UNC paths (`\\server\share\...`); `Dir` also holds module-level global state that corrupts nested loops | `Scripting.FileSystemObject` (late-bound via `CreateObject`) for all file I/O |
+
+### Testing harness (`devkit_Test` + PowerShell runner)
+
+| Approach | Why it fails | Correct alternative |
+|---|---|---|
+| Work copy of the workbook under a system temp folder | Temp is not an Excel trusted location, so macros are blocked and the harness cannot run | Put the work copy under `<wb>/test-results/work/` (inherits the original's trusted location) |
+| PowerShell `$Cases` param alongside a `$cases` loop variable | PowerShell identifiers are case-insensitive, so the two collide and the variable overwrites the parameter | Rename the loop variable (e.g. `$caseList`) |
+| Passing `Get-Content -Raw` output straight to `ConvertTo-Json` | The raw string carries `PSPath`/`PSProvider` note properties, which serialize as a nested object; the VBA parser then sees a Dictionary instead of a string | Cast to `[string]` before serializing |
+| Building the sample workbook without importing `xlsm_devkit.bas` | `DevkitApplyFixture` reuses `ParseMDTableRow` from the core module, so it raises "Sub or Function not defined" | The builder must import the core module too (harness workbook needs `xlsm_devkit.bas` + `devkit_Test.bas`) |
+| Relying on core `TrimMDTableField` to clean hand-aligned fixture values | It strips only one padding space, so a hand-aligned value keeps trailing spaces -- `"5  "` becomes text and yields `#VALUE!` | `Trim` the fixture value/formula before applying |
+
+---
+
+## Known Limits / Performance
+
+### `merge=1` import is slow on large merged sheets
+
+`ws.Cells.UnMerge` (executed when `merge=1`) is a blocking COM call that scales
+poorly with the number of merged regions. Workaround: set `merge=0` in
+`xlsm_devkit.ini` to skip `UnMerge` / `ClearFormats` / `ReconstructMerges`.
+
+Field measurements below were taken on an **external production workbook, not a
+sample in this repository** (this repo's `sheet/` only contains small fixtures):
+
+| Sheet (external) | Merged rows | Approx. import time at `merge=1` |
+|---|---|---|
+| Sheet9 | ~3500 | ~8 min |
+| Sheet11 | ~591 | ~5 min |
+| Sheet12 | ~583 | ~15 min |
