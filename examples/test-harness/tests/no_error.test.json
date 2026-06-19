@@ -1,0 +1,18 @@
+{
+  "tests": [
+    {
+      "name": "No Excel error on the Result sheet for any input",
+      "type": "property",
+      "inputs": [
+        { "role": "input" }
+      ],
+      "generate": {
+        "strategy": "boundary_and_random",
+        "cases": 50
+      },
+      "expect": [
+        { "sheet": "Result", "used_range": true, "assert": "no_error" }
+      ]
+    }
+  ]
+}

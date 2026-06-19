@@ -4,6 +4,21 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- Testing harness (Phase 1 MVP): new optional module `src/devkit_Test.bas` plus a
+  PowerShell runner that treats a workbook like testable code. It generates boundary
+  and random inputs into a temp copy and asserts that the result sheet stays free of
+  Excel errors (`no_error` property check). All VBA API is non-interactive and uses
+  JSON in/out (`DevkitTestPing`, `DevkitResolveInputs`, `DevkitApplyInputs`,
+  `DevkitCalculateFullRebuild`, `DevkitAssertNoErrors`, `DevkitWriteResult`).
+  Standard Windows PowerShell only -- no Python or external modules.
+  - `tools/Invoke-XlsmDevkitTest.ps1` -- orchestrator (temp copy, COM, generation, cleanup)
+  - `tools/New-SampleTestWorkbook.ps1` -- builds a sample workbook for verification
+  - `examples/test-harness/tests/*.json` -- meta/role + `no_error` test templates
+  - `TESTING.md` -- harness reference; README (EN/JA) sections added
+  - The module carries the `devkit_` prefix, so it is auto-skipped on import/export and
+    stripped from released workbooks by existing machinery (no core changes).
+
 ## [1.12.0] - 2026-06-14
 
 ### Fixed

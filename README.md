@@ -82,6 +82,25 @@ SetLang "ja"   ' switch to Japanese
 SetLang ""     ' revert to system auto-detection
 ```
 
+### Testing harness (experimental, Phase 1 MVP)
+
+Treat a workbook like testable code. The optional `devkit_Test.bas` module plus a
+PowerShell runner answer a high-value question: **no matter what boundary, blank,
+invalid, or random value is entered into any input cell, does the result sheet stay
+free of Excel errors (`#DIV/0!`, `#N/A`, ...)?**
+
+- Standard Windows PowerShell only — no Python, no external modules.
+- Specs are JSON (`tests/workbook.meta.json`, `tests/no_error.test.json`); results are
+  written to `test-results/latest/result.{json,md}`.
+- The original workbook is never modified (every run uses a temp copy).
+
+```powershell
+.\tools\New-SampleTestWorkbook.ps1                                   # build a sample (dev only)
+.\tools\Invoke-XlsmDevkitTest.ps1 -Workbook .\examples\test-harness\sample.xlsm
+```
+
+See **[TESTING.md](TESTING.md)** for the full API, JSON schema, and runbook.
+
 ## Usage
 
 ### Initial setup (add to a new workbook)

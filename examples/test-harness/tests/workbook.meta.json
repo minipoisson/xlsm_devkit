@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "input_detection": {
+    "unlocked_cells_on_protected_sheets": true
+  },
+  "sheets": {
+    "Input": {
+      "role": "user_input_sheet"
+    },
+    "Result": {
+      "role": "output_sheet",
+      "outputs": [
+        { "used_range": true, "assertions": ["no_error"] }
+      ]
+    }
+  }
+}

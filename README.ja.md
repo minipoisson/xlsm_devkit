@@ -80,6 +80,25 @@ SetLang "ja"   ' 日本語に切り替え
 SetLang ""     ' システム設定に戻す
 ```
 
+### テストハーネス（実験的・Phase 1 MVP）
+
+ブックをコードのようにテストします。オプションの `devkit_Test.bas` モジュールと
+PowerShell ランナーが、実務帳票で価値の高い検証に答えます。すなわち
+**「入力セルにどんな境界値・空欄・不正値・ランダム値を入れても、結果シートに
+Excel エラー（`#DIV/0!`, `#N/A` など）が出ないか」**。
+
+- 標準の Windows PowerShell のみで完結（Python・外部モジュール不要）。
+- 仕様は JSON（`tests/workbook.meta.json`, `tests/no_error.test.json`）、結果は
+  `test-results/latest/result.{json,md}` に出力。
+- 原本ブックは一切変更しません（毎回一時コピーで実行）。
+
+```powershell
+.\tools\New-SampleTestWorkbook.ps1                                   # サンプル生成（開発時のみ）
+.\tools\Invoke-XlsmDevkitTest.ps1 -Workbook .\examples\test-harness\sample.xlsm
+```
+
+API・JSON スキーマ・実行手順の詳細は **[TESTING.md](TESTING.md)**（英語）を参照してください。
+
 ## 使い方
 
 ### 導入手順（新規ブックに組み込む）

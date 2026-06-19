@@ -10,3 +10,5 @@ sheet/
 SESSION_BOOTSTRAP.md
 .continue/
 *.log
+test-results/
+xlsm_devkit_test.lock
