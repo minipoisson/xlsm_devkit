@@ -66,6 +66,34 @@ Prefer late binding (`CreateObject`) so the code does not require a reference ad
 
 ---
 
+## Source files
+
+### ASCII-only VBA source
+
+- `.bas` / `.frm` files must be **ASCII only**: write em-dashes as `--`, no Japanese
+  comments, introduce no new non-ASCII characters.
+- Pre-existing em-dashes in `xlsm_devkit.bas` are out of scope -- leave them as they are,
+  but do not add more.
+
+### User-facing strings (i18n)
+
+- Any string shown to the user through `MsgBox` must be resolved via `t()` (lookup) and,
+  when it contains placeholders, formatted with `Fmt`. Log / `Debug.Print` messages may
+  stay English.
+
+### Language resource files
+
+- `lang/*.ini` are **UTF-8 without BOM**. A new key must be added to **all 27** language
+  files. (`ReadUTF8` / ADODB strips any leading BOM on read; keep the files BOM-less for
+  consistency with the rest of the repo, which writes BOM-less UTF-8 everywhere.)
+
+### Binary form resources
+
+- `src/*.frx` are binary UserForm resources. If an unintended Excel operation touches them,
+  restore with `git restore src/*.frx` rather than committing the churn.
+
+---
+
 ## Git commit
 
 - Stage all modified and untracked files that are **not excluded by `.gitignore`**.
