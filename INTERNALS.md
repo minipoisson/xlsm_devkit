@@ -160,6 +160,7 @@ These are recorded to prevent revisiting the same dead ends.
 | Passing `Get-Content -Raw` output straight to `ConvertTo-Json` | The raw string carries `PSPath`/`PSProvider` note properties, which serialize as a nested object; the VBA parser then sees a Dictionary instead of a string | Cast to `[string]` before serializing |
 | Building the sample workbook without importing `xlsm_devkit.bas` | `DevkitApplyFixture` reuses `ParseMDTableRow` from the core module, so it raises "Sub or Function not defined" | The builder must import the core module too (harness workbook needs `xlsm_devkit.bas` + `devkit_Test.bas`) |
 | Relying on core `TrimMDTableField` to clean hand-aligned fixture values | It strips only one padding space, so a hand-aligned value keeps trailing spaces -- `"5  "` becomes text and yields `#VALUE!` | `Trim` the fixture value/formula before applying |
+| Naming a PowerShell runner helper with an unapproved verb (e.g. `Apply-TestFixtures`) | `Apply` is not an approved PowerShell verb, so PSScriptAnalyzer / editor tooling flags `PSUseApprovedVerbs`; an auto-suggested rename can also touch only the definition and silently break the call sites | Use an approved verb (`Invoke-*`) and update every call site in the same edit |
 
 ---
 
