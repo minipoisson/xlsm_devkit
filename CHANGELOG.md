@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.14.0] - 2026-07-12
+
 ### Added
 - Testing harness Phase 2: fixed-scenario tests. A test spec may set `"type": "scenario"`
   to apply an explicit set of `inputs` once, recalculate, and check specific cells with
