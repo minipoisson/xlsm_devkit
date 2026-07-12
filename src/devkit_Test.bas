@@ -28,9 +28,10 @@ Option Explicit
 '   DevkitApplyInputs(inputsJson)    -> write values into target cells
 '   DevkitCalculateFullRebuild()     -> Application.CalculateFullRebuild
 '   DevkitAssertNoErrors(targetJson) -> scan targets for Excel error values
+'   DevkitAssertExpectations(json)   -> check fixed-scenario expectations per cell
 '   DevkitWriteResult(resultJson)    -> write result.json + result.md
 
-Private Const DEVKIT_TEST_VERSION As String = "0.1.0"
+Private Const DEVKIT_TEST_VERSION As String = "0.2.0"
 
 ' ===== JSON parser state (module-level; one parse at a time) =====
 Private mJson As String
@@ -231,6 +232,88 @@ EH:
     DevkitAssertNoErrors = JsonErr(Err.Description)
 End Function
 
+' Evaluates fixed-scenario expectations against the current calculated state.
+' Each expectation targets a single cell (sheet / code_name + address) and one of:
+'   "blank"        -> cell has no content (Value2 is Empty or "")
+'   "not_blank"    -> cell has any content (an error value counts as content)
+'   "equals"       -> displayed text equals "value" (exact, case-sensitive)
+'   "not_contains" -> displayed text does NOT contain "value" (substring)
+' Comparison for equals / not_contains is on the DISPLAYED text (Range.Text), so it
+' matches what a user sees (number formats etc.); there is no numeric tolerance.
+'   expectationsJson:
+'     { "expectations": [
+'         { "code_name":"Sheet2","address":"B2","assert":"equals","value":"50" },
+'         { "sheet":"Result","address":"B7","assert":"blank" } ] }
+' Returns { "failures":[ {sheet,address,assert,expected,actual,formula,error} ],
+'           "checked":n, "failCount":n }.
+Public Function DevkitAssertExpectations(ByVal expectationsJson As String) As String
+    On Error GoTo EH
+    Dim payload As Object: Set payload = JsonParse(expectationsJson)
+    Dim arr As Object: Set arr = payload("expectations")
+
+    Dim sb As String: sb = ""
+    Dim first As Boolean: first = True
+    Dim checked As Long: checked = 0
+    Dim failCount As Long: failCount = 0
+
+    Dim i As Long
+    For i = 1 To arr.Count
+        Dim it As Object: Set it = arr(i)
+        Dim ws As Worksheet: Set ws = ResolveSheetRef(it)
+
+        Dim asrt As String: asrt = ""
+        If it.Exists("assert") Then asrt = LCase(CStr(it("assert")))
+        Dim expected As String: expected = ""
+        If it.Exists("value") Then expected = CStr(it("value"))
+        Dim addr As String: addr = ""
+        If it.Exists("address") Then addr = CStr(it("address"))
+
+        Dim target As Range: Set target = Nothing
+        If Not ws Is Nothing And Len(addr) > 0 Then
+            On Error Resume Next
+            Set target = ws.Range(addr)
+            On Error GoTo EH
+        End If
+
+        checked = checked + 1
+        Dim ok As Boolean, actual As String, reason As String
+        actual = "": reason = ""
+        If ws Is Nothing Then
+            ok = False: reason = "sheet not found"
+        ElseIf target Is Nothing Then
+            ok = False: reason = "bad address"
+        Else
+            actual = CStr(target.Text)
+            ok = EvalExpectation(target, asrt, expected, actual, reason)
+        End If
+
+        If Not ok Then
+            failCount = failCount + 1
+            Dim fml As String: fml = ""
+            If Not target Is Nothing Then
+                If target.HasFormula Then fml = target.Formula
+            End If
+            Dim shLabel As String
+            If Not ws Is Nothing Then shLabel = ws.Name Else shLabel = SheetRefLabel(it)
+            If Not first Then sb = sb & ","
+            first = False
+            sb = sb & "{""sheet"":" & JsonStr(shLabel) & _
+                 ",""address"":" & JsonStr(addr) & _
+                 ",""assert"":" & JsonStr(asrt) & _
+                 ",""expected"":" & JsonStr(expected) & _
+                 ",""actual"":" & JsonStr(actual) & _
+                 ",""formula"":" & JsonStr(fml) & _
+                 ",""error"":" & JsonStr(reason) & "}"
+        End If
+    Next i
+
+    DevkitAssertExpectations = "{""failures"":[" & sb & "],""checked"":" & checked & _
+                               ",""failCount"":" & failCount & "}"
+    Exit Function
+EH:
+    DevkitAssertExpectations = JsonErr(Err.Description)
+End Function
+
 Public Function DevkitWriteResult(ByVal resultJson As String) As String
     On Error GoTo EH
     Dim payload As Object: Set payload = JsonParse(resultJson)
@@ -401,6 +484,58 @@ Private Function ApplyValueToRange(ByVal target As Range, ByVal vtype As String,
     If Err.Number <> 0 Then ok = False
     On Error GoTo 0
     ApplyValueToRange = ok
+End Function
+
+' Evaluates one scenario expectation against a resolved cell. Sets `actual` to the
+' displayed text and, on failure, `reason` to a human-readable mismatch message.
+' Returns True when the assertion holds.
+Private Function EvalExpectation(ByVal target As Range, ByVal asrt As String, _
+                                 ByVal expected As String, ByRef actual As String, _
+                                 ByRef reason As String) As Boolean
+    Select Case asrt
+        Case "blank"
+            If CellIsBlank(target) Then
+                EvalExpectation = True
+            Else
+                reason = "expected blank, got " & QuoteVal(actual)
+            End If
+        Case "not_blank"
+            If Not CellIsBlank(target) Then
+                EvalExpectation = True
+            Else
+                reason = "expected non-blank, got blank"
+            End If
+        Case "equals"
+            If StrComp(actual, expected, vbBinaryCompare) = 0 Then
+                EvalExpectation = True
+            Else
+                reason = "equals: expected " & QuoteVal(expected) & " got " & QuoteVal(actual)
+            End If
+        Case "not_contains"
+            If Len(expected) = 0 Then
+                EvalExpectation = True    ' nothing to look for
+            ElseIf InStr(1, actual, expected, vbBinaryCompare) = 0 Then
+                EvalExpectation = True
+            Else
+                reason = "not_contains: " & QuoteVal(expected) & " found in " & QuoteVal(actual)
+            End If
+        Case Else
+            reason = "unknown assert: " & asrt
+    End Select
+End Function
+
+' True when a cell has no content. An error value counts as content (not blank);
+' a formula returning "" (Value2 = "") is treated as blank, as is an empty cell.
+Private Function CellIsBlank(ByVal target As Range) As Boolean
+    Dim v As Variant: v = target.Value2
+    If IsError(v) Then Exit Function
+    If IsEmpty(v) Then CellIsBlank = True: Exit Function
+    CellIsBlank = (Len(CStr(v)) = 0)
+End Function
+
+' Wraps a value in double quotes for readable mismatch messages.
+Private Function QuoteVal(ByVal s As String) As String
+    QuoteVal = """" & s & """"
 End Function
 
 ' True for the Markdown table header row ("| Address | ... |") or a separator row

@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- Testing harness Phase 2: fixed-scenario tests. A test spec may set `"type": "scenario"`
+  to apply an explicit set of `inputs` once, recalculate, and check specific cells with
+  the new assertions `blank` / `not_blank` / `equals` / `not_contains`. `equals` /
+  `not_contains` compare against the cell's displayed text (`Range.Text`), no numeric
+  tolerance. Implemented by a new non-interactive VBA API `DevkitAssertExpectations`
+  (JSON in/out) in `devkit_Test.bas`.
+  - `tools/Invoke-XlsmDevkitTest.ps1` now dispatches per test on `type` (default
+    `property`); the existing `no_error` property flow is unchanged.
+  - `examples/test-harness/tests/scenario.test.json` -- sample scenario spec.
+
 ## [1.13.0] - 2026-06-19
 
 ### Added

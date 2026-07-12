@@ -1,0 +1,22 @@
+{
+  "tests": [
+    {
+      "name": "Quantity=2, price=50 yields expected metrics",
+      "type": "scenario",
+      "fixtures": [
+        { "sheet": "Result", "md_file": "tests/fixtures/seed.md" }
+      ],
+      "inputs": [
+        { "sheet": "Input", "address": "B2", "value": "2",  "type": "number" },
+        { "sheet": "Input", "address": "B3", "value": "50", "type": "number" }
+      ],
+      "expect": [
+        { "sheet": "Result", "address": "B2", "assert": "equals",       "value": "25" },
+        { "sheet": "Result", "address": "B3", "assert": "equals",       "value": "20" },
+        { "sheet": "Result", "address": "B4", "assert": "equals",       "value": "100" },
+        { "sheet": "Result", "address": "B3", "assert": "not_blank" },
+        { "sheet": "Result", "address": "B6", "assert": "not_contains", "value": "#" }
+      ]
+    }
+  ]
+}

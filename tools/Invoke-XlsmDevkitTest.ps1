@@ -105,6 +105,34 @@ function Remove-ComObject($obj) {
     }
 }
 
+# Invokes a test's fixtures (seed cells) once, before the test runs. Reuses the
+# same shape as the original Phase 1 fixture step; [string]-casts Get-Content -Raw
+# so PSPath/PSProvider note properties are not serialized into the JSON.
+function Invoke-TestFixtures($xl, [string]$prefix, $test, [string]$wbFolder) {
+    $fixtureList = New-Object System.Collections.ArrayList
+    foreach ($fx in @(Get-Prop $test 'fixtures')) {
+        $fxObj = @{}
+        $fxSheet = Get-Prop $fx 'sheet'
+        $fxCode  = Get-Prop $fx 'code_name'
+        if ($fxCode)  { $fxObj.code_name = $fxCode }
+        if ($fxSheet) { $fxObj.sheet = $fxSheet }
+        $fxMd = Get-Prop $fx 'md'
+        $fxMdFile = Get-Prop $fx 'md_file'
+        if ($fxMdFile) {
+            $fxPath = if ([System.IO.Path]::IsPathRooted($fxMdFile)) { $fxMdFile } else { Join-Path $wbFolder $fxMdFile }
+            if (-not (Test-Path -LiteralPath $fxPath)) { throw "fixture md_file not found: $fxPath" }
+            $fxMd = [string](Get-Content -LiteralPath $fxPath -Raw -Encoding UTF8)
+        }
+        if ($fxMd) { $fxObj.md = $fxMd; [void]$fixtureList.Add($fxObj) }
+    }
+    if ($fixtureList.Count -gt 0) {
+        $fixtureJson = ConvertTo-Json @{ fixtures = @($fixtureList) } -Depth 6 -Compress
+        $fxRes = $xl.Run($prefix + 'DevkitApplyFixture', $fixtureJson) | ConvertFrom-Json
+        if ($null -ne ($fxRes.PSObject.Properties['error'])) { throw "DevkitApplyFixture failed: $($fxRes.error)" }
+        Write-Host "  fixtures: applied $($fxRes.applied) cell(s)."
+    }
+}
+
 # ---------------------------------------------------------------------------
 # Resolve paths
 # ---------------------------------------------------------------------------
@@ -182,140 +210,181 @@ try {
     if (-not $ping.ok) { throw "DevkitTestPing failed: $($ping.error)" }
     Write-Host "Connected: devkit_Test $($ping.version) on $($ping.workbook)"
 
-    # --- 2. Resolve input targets -------------------------------------------
+    # --- 2. Resolve input targets (needed only by property-type tests) ------
     $resolved = $xl.Run($runPrefix + 'DevkitResolveInputs', $metaJson) | ConvertFrom-Json
     if ($null -ne ($resolved.PSObject.Properties['error'])) { throw "DevkitResolveInputs failed: $($resolved.error)" }
     # Normalize to plain hashtables so optional code_name/address/range are always present (as $null).
     $normTargets = @(@(Get-Prop $resolved 'inputs') | ForEach-Object {
         @{ sheet = $_.sheet; code_name = (Get-Prop $_ 'code_name'); address = (Get-Prop $_ 'address'); range = (Get-Prop $_ 'range') }
     })
-    if ($normTargets.Count -eq 0) { throw "No input cells resolved. Check meta.json roles / unlocked cells." }
     Write-Host "Resolved $($normTargets.Count) input target(s)."
 
-    # --- 3. Build assertion targets from the test spec expect blocks --------
-    $assertTargets = New-Object System.Collections.ArrayList
-    $caseCount = $Cases
-    foreach ($test in @(Get-Prop $testSpec 'tests')) {
-        $gen = Get-Prop $test 'generate'
-        $genCases = Get-Prop $gen 'cases'
-        if ($caseCount -le 0 -and $genCases) { $caseCount = [int]$genCases }
-        foreach ($exp in @(Get-Prop $test 'expect')) {
-            $t = @{}
-            $expSheet = Get-Prop $exp 'sheet'
-            $expCode  = Get-Prop $exp 'code_name'
-            if ($expCode)  { $t.code_name = $expCode }
-            if ($expSheet) { $t.sheet = $expSheet }
-            $expUsed = Get-Prop $exp 'used_range'
-            $expRange = Get-Prop $exp 'range'
-            if ($expUsed) { $t.used_range = $true }
-            elseif ($expRange) { $t.range = $expRange }
-            else { $t.used_range = $true }
-            [void]$assertTargets.Add($t)
-        }
-    }
-    if ($caseCount -le 0) { $caseCount = 50 }
-    $assertJson = ConvertTo-Json @{ targets = @($assertTargets) } -Depth 6 -Compress
-
-    # --- 3b. Apply fixtures once, before the case loop (seed cells) ----------
-    $fixtureList = New-Object System.Collections.ArrayList
-    foreach ($test in @(Get-Prop $testSpec 'tests')) {
-        foreach ($fx in @(Get-Prop $test 'fixtures')) {
-            $fxObj = @{}
-            $fxSheet = Get-Prop $fx 'sheet'
-            $fxCode  = Get-Prop $fx 'code_name'
-            if ($fxCode)  { $fxObj.code_name = $fxCode }
-            if ($fxSheet) { $fxObj.sheet = $fxSheet }
-            $fxMd = Get-Prop $fx 'md'
-            $fxMdFile = Get-Prop $fx 'md_file'
-            if ($fxMdFile) {
-                $fxPath = if ([System.IO.Path]::IsPathRooted($fxMdFile)) { $fxMdFile } else { Join-Path $wbFolder $fxMdFile }
-                if (-not (Test-Path -LiteralPath $fxPath)) { throw "fixture md_file not found: $fxPath" }
-                # Cast to plain [string]: Get-Content -Raw attaches PSPath/PSProvider note
-                # properties that ConvertTo-Json would otherwise serialize as an object.
-                $fxMd = [string](Get-Content -LiteralPath $fxPath -Raw -Encoding UTF8)
-            }
-            if ($fxMd) { $fxObj.md = $fxMd; [void]$fixtureList.Add($fxObj) }
-        }
-    }
-    if ($fixtureList.Count -gt 0) {
-        $fixtureJson = ConvertTo-Json @{ fixtures = @($fixtureList) } -Depth 6 -Compress
-        $fxRes = $xl.Run($runPrefix + 'DevkitApplyFixture', $fixtureJson) | ConvertFrom-Json
-        if ($null -ne ($fxRes.PSObject.Properties['error'])) { throw "DevkitApplyFixture failed: $($fxRes.error)" }
-        Write-Host "Applied fixtures: $($fxRes.applied) cell(s)."
-    }
-
-    # --- 4. Generate cases (boundary sweep, then random) --------------------
+    # --- 3. Run each test, dispatching on its "type" (default: property) -----
     if ($Seed -eq 0) { $rng = New-Object System.Random } else { $rng = New-Object System.Random($Seed) }
     $boundary = Get-BoundarySet
 
-    $caseList = New-Object System.Collections.ArrayList
-    # Phase A: boundary sweep -- every target gets boundary[j] (guarantees 0, blank, etc.)
-    for ($j = 0; $j -lt $boundary.Count -and $caseList.Count -lt $caseCount; $j++) {
-        $ci = @()
-        foreach ($tg in $normTargets) {
-            $ci += @{ sheet = $tg.sheet; code_name = $tg.code_name; address = $tg.address; range = $tg.range;
-                      value = $boundary[$j].value; type = $boundary[$j].type }
-        }
-        [void]$caseList.Add($ci)
-    }
-    # Phase B: random per-target
-    while ($caseList.Count -lt $caseCount) {
-        $ci = @()
-        foreach ($tg in $normTargets) {
-            if ($rng.Next(0, 100) -lt 30) { $pick = $boundary[$rng.Next(0, $boundary.Count)] }
-            else { $pick = Get-RandomValue $rng }
-            $ci += @{ sheet = $tg.sheet; code_name = $tg.code_name; address = $tg.address; range = $tg.range;
-                      value = $pick.value; type = $pick.type }
-        }
-        [void]$caseList.Add($ci)
-    }
-
-    # --- 5. Run the cases ----------------------------------------------------
     $failures = New-Object System.Collections.ArrayList
+    $totalCases = 0
     $failedCases = 0
-    $caseNo = 0
-    foreach ($ci in $caseList) {
-        $caseNo++
-        $applyInputs = @($ci | ForEach-Object {
-            $o = @{ value = $_.value; type = $_.type }
-            if ($_.code_name) { $o.code_name = $_.code_name }
-            if ($_.sheet)     { $o.sheet = $_.sheet }
-            if ($_.address)   { $o.address = $_.address }
-            if ($_.range)     { $o.range = $_.range }
-            $o
-        })
-        $applyJson = ConvertTo-Json @{ inputs = $applyInputs } -Depth 6 -Compress
 
-        $applyRes = $xl.Run($runPrefix + 'DevkitApplyInputs', $applyJson) | ConvertFrom-Json
-        if ($null -ne ($applyRes.PSObject.Properties['error'])) { throw "DevkitApplyInputs failed: $($applyRes.error)" }
+    foreach ($test in @(Get-Prop $testSpec 'tests')) {
+        $testType = Resolve-Default (Get-Prop $test 'type') 'property'
+        $testName = Resolve-Default (Get-Prop $test 'name') $testType
+        Write-Host "Test: $testName [$testType]"
 
-        $null = $xl.Run($runPrefix + 'DevkitCalculateFullRebuild') | ConvertFrom-Json
+        # Seed cells for this test (non-destructive), before running it.
+        Invoke-TestFixtures $xl $runPrefix $test $wbFolder
 
-        $assertRes = $xl.Run($runPrefix + 'DevkitAssertNoErrors', $assertJson) | ConvertFrom-Json
-        if ($null -ne ($assertRes.PSObject.Properties['error'])) { throw "DevkitAssertNoErrors failed: $($assertRes.error)" }
+        if ($testType -eq 'scenario') {
+            # --- scenario: apply fixed inputs once, then check expectations ---
+            $scInputs = @(@(Get-Prop $test 'inputs') | ForEach-Object {
+                @{ sheet = (Get-Prop $_ 'sheet'); code_name = (Get-Prop $_ 'code_name');
+                   address = (Get-Prop $_ 'address'); range = (Get-Prop $_ 'range');
+                   value = (Get-Prop $_ 'value'); type = (Get-Prop $_ 'type') }
+            })
+            $applyInputs = @($scInputs | ForEach-Object {
+                $o = @{ value = $_.value; type = $_.type }
+                if ($_.code_name) { $o.code_name = $_.code_name }
+                if ($_.sheet)     { $o.sheet = $_.sheet }
+                if ($_.address)   { $o.address = $_.address }
+                if ($_.range)     { $o.range = $_.range }
+                $o
+            })
+            $applyJson = ConvertTo-Json @{ inputs = @($applyInputs) } -Depth 6 -Compress
+            $applyRes = $xl.Run($runPrefix + 'DevkitApplyInputs', $applyJson) | ConvertFrom-Json
+            if ($null -ne ($applyRes.PSObject.Properties['error'])) { throw "DevkitApplyInputs failed: $($applyRes.error)" }
 
-        if ([int]$assertRes.failCount -gt 0) {
-            $failedCases++
-            $summary = Format-InputsSummary $ci
-            foreach ($f in @($assertRes.failures)) {
-                if ($failures.Count -lt 200) {
-                    [void]$failures.Add(@{
-                        case = $caseNo; inputs = $summary;
-                        sheet = $f.sheet; address = $f.address;
-                        error = $f.error; formula = $f.formula
-                    })
+            $null = $xl.Run($runPrefix + 'DevkitCalculateFullRebuild') | ConvertFrom-Json
+
+            $expList = @(@(Get-Prop $test 'expect') | ForEach-Object {
+                $e = @{}
+                $eCode = Get-Prop $_ 'code_name'; $eSheet = Get-Prop $_ 'sheet'
+                if ($eCode)  { $e.code_name = $eCode }
+                if ($eSheet) { $e.sheet = $eSheet }
+                $eAddr = Get-Prop $_ 'address'; if ($eAddr) { $e.address = $eAddr }
+                $eAssert = Get-Prop $_ 'assert'; if ($eAssert) { $e.assert = $eAssert }
+                # value is compared as displayed text, so serialize it as a string.
+                if ($null -ne $_.PSObject.Properties['value']) { $e.value = [string](Get-Prop $_ 'value') }
+                $e
+            })
+            $expJson = ConvertTo-Json @{ expectations = @($expList) } -Depth 6 -Compress
+            $assertRes = $xl.Run($runPrefix + 'DevkitAssertExpectations', $expJson) | ConvertFrom-Json
+            if ($null -ne ($assertRes.PSObject.Properties['error'])) { throw "DevkitAssertExpectations failed: $($assertRes.error)" }
+
+            $totalCases++
+            if ([int]$assertRes.failCount -gt 0) {
+                $failedCases++
+                $summary = Format-InputsSummary $scInputs
+                foreach ($f in @($assertRes.failures)) {
+                    if ($failures.Count -lt 200) {
+                        [void]$failures.Add(@{
+                            case = $testName; inputs = $summary;
+                            sheet = $f.sheet; address = $f.address;
+                            error = $f.error; formula = $f.formula
+                        })
+                    }
                 }
             }
         }
+        else {
+            # --- property (default): generate inputs, assert no Excel errors --
+            if ($normTargets.Count -eq 0) {
+                throw "No input cells resolved for property test '$testName'. Check meta.json roles / unlocked cells."
+            }
+
+            # Assertion targets from this test's expect blocks (no_error over ranges).
+            $assertTargets = New-Object System.Collections.ArrayList
+            foreach ($exp in @(Get-Prop $test 'expect')) {
+                $t = @{}
+                $expSheet = Get-Prop $exp 'sheet'
+                $expCode  = Get-Prop $exp 'code_name'
+                if ($expCode)  { $t.code_name = $expCode }
+                if ($expSheet) { $t.sheet = $expSheet }
+                $expUsed = Get-Prop $exp 'used_range'
+                $expRange = Get-Prop $exp 'range'
+                if ($expUsed) { $t.used_range = $true }
+                elseif ($expRange) { $t.range = $expRange }
+                else { $t.used_range = $true }
+                [void]$assertTargets.Add($t)
+            }
+            $assertJson = ConvertTo-Json @{ targets = @($assertTargets) } -Depth 6 -Compress
+
+            # Case count: -Cases override, else generate.cases, else 50.
+            $caseCount = $Cases
+            if ($caseCount -le 0) {
+                $genCases = Get-Prop (Get-Prop $test 'generate') 'cases'
+                if ($genCases) { $caseCount = [int]$genCases }
+            }
+            if ($caseCount -le 0) { $caseCount = 50 }
+
+            # Generate cases: boundary sweep, then random per-target.
+            $caseList = New-Object System.Collections.ArrayList
+            for ($j = 0; $j -lt $boundary.Count -and $caseList.Count -lt $caseCount; $j++) {
+                $ci = @()
+                foreach ($tg in $normTargets) {
+                    $ci += @{ sheet = $tg.sheet; code_name = $tg.code_name; address = $tg.address; range = $tg.range;
+                              value = $boundary[$j].value; type = $boundary[$j].type }
+                }
+                [void]$caseList.Add($ci)
+            }
+            while ($caseList.Count -lt $caseCount) {
+                $ci = @()
+                foreach ($tg in $normTargets) {
+                    if ($rng.Next(0, 100) -lt 30) { $pick = $boundary[$rng.Next(0, $boundary.Count)] }
+                    else { $pick = Get-RandomValue $rng }
+                    $ci += @{ sheet = $tg.sheet; code_name = $tg.code_name; address = $tg.address; range = $tg.range;
+                              value = $pick.value; type = $pick.type }
+                }
+                [void]$caseList.Add($ci)
+            }
+
+            # Run the cases.
+            $caseNo = 0
+            foreach ($ci in $caseList) {
+                $caseNo++
+                $applyInputs = @($ci | ForEach-Object {
+                    $o = @{ value = $_.value; type = $_.type }
+                    if ($_.code_name) { $o.code_name = $_.code_name }
+                    if ($_.sheet)     { $o.sheet = $_.sheet }
+                    if ($_.address)   { $o.address = $_.address }
+                    if ($_.range)     { $o.range = $_.range }
+                    $o
+                })
+                $applyJson = ConvertTo-Json @{ inputs = $applyInputs } -Depth 6 -Compress
+
+                $applyRes = $xl.Run($runPrefix + 'DevkitApplyInputs', $applyJson) | ConvertFrom-Json
+                if ($null -ne ($applyRes.PSObject.Properties['error'])) { throw "DevkitApplyInputs failed: $($applyRes.error)" }
+
+                $null = $xl.Run($runPrefix + 'DevkitCalculateFullRebuild') | ConvertFrom-Json
+
+                $assertRes = $xl.Run($runPrefix + 'DevkitAssertNoErrors', $assertJson) | ConvertFrom-Json
+                if ($null -ne ($assertRes.PSObject.Properties['error'])) { throw "DevkitAssertNoErrors failed: $($assertRes.error)" }
+
+                if ([int]$assertRes.failCount -gt 0) {
+                    $failedCases++
+                    $summary = Format-InputsSummary $ci
+                    foreach ($f in @($assertRes.failures)) {
+                        if ($failures.Count -lt 200) {
+                            [void]$failures.Add(@{
+                                case = $caseNo; inputs = $summary;
+                                sheet = $f.sheet; address = $f.address;
+                                error = $f.error; formula = $f.formula
+                            })
+                        }
+                    }
+                }
+            }
+            $totalCases += $caseList.Count
+        }
     }
 
-    # --- 6. Write result -----------------------------------------------------
+    # --- 4. Write result -----------------------------------------------------
     $passed = ($failedCases -eq 0)
     $payload = @{
         outputDir   = $outputDir
         workbook    = $wbName
         generatedAt = (Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
-        summary     = @{ cases = $caseList.Count; failedCases = $failedCases; passed = $passed }
+        summary     = @{ cases = $totalCases; failedCases = $failedCases; passed = $passed }
         failures    = @($failures)
     }
     $payloadJson = ConvertTo-Json $payload -Depth 8 -Compress
@@ -323,7 +392,7 @@ try {
     if (-not $writeRes.ok) { throw "DevkitWriteResult failed: $($writeRes.error)" }
 
     Write-Host ""
-    Write-Host "Cases run : $($caseList.Count)"
+    Write-Host "Cases run : $totalCases"
     Write-Host "Failed    : $failedCases"
     Write-Host "Result    : $(if ($passed) {'PASS'} else {'FAIL'})"
     Write-Host "result.md : $($writeRes.md)"

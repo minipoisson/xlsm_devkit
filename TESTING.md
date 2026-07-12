@@ -47,6 +47,7 @@ All functions are non-interactive and take/return a JSON string.
 | `DevkitApplyInputs(inputsJson)` | Write values into target cells (with a `blank`/`text`/`number` type hint) |
 | `DevkitCalculateFullRebuild()` | `Application.CalculateFullRebuild` |
 | `DevkitAssertNoErrors(targetJson)` | Scan target ranges / `used_range` for Excel error values |
+| `DevkitAssertExpectations(json)` | Check fixed-scenario expectations per cell (`blank` / `not_blank` / `equals` / `not_contains`) |
 | `DevkitApplyFixture(fixtureJson)` | Seed cells with values/formulas from a Markdown table before the run (non-destructive) |
 | `DevkitWriteResult(resultJson)` | Write `result.json` + `result.md` to a given output folder |
 
@@ -143,14 +144,65 @@ A formula (column 4) takes priority over a literal value (column 3), matching th
 sheet-map import. The Style column is ignored by fixtures (value/formula only). You can
 paste a slice of an existing `sheet/*.md` straight into a fixture file.
 
+## Fixed-scenario tests (`scenario` type)
+
+Alongside the generative `property` / `no_error` check, a test may be a **fixed
+scenario**: apply a known set of inputs once, recalculate, then assert specific cells
+against expected outcomes. Use it for concrete business rules ("for a male patient the
+obstetrics result cell must be blank"; "quantity=2, price=50 -> total=100").
+
+Set `"type": "scenario"`. Instead of `generate`, list explicit `inputs` (each a cell
+reference plus `value` and optional `type` hint, same as `DevkitApplyInputs`), and give
+each `expect` entry an `assert` and, where relevant, a `value`:
+
+```json
+{
+  "tests": [
+    {
+      "name": "Quantity=2, price=50 yields expected metrics",
+      "type": "scenario",
+      "fixtures": [ { "sheet": "Result", "md_file": "tests/fixtures/seed.md" } ],
+      "inputs": [
+        { "sheet": "Input", "address": "B2", "value": "2",  "type": "number" },
+        { "sheet": "Input", "address": "B3", "value": "50", "type": "number" }
+      ],
+      "expect": [
+        { "sheet": "Result", "address": "B2", "assert": "equals",       "value": "25" },
+        { "sheet": "Result", "address": "B4", "assert": "equals",       "value": "100" },
+        { "sheet": "Result", "address": "B3", "assert": "not_blank" },
+        { "sheet": "Result", "address": "B6", "assert": "not_contains", "value": "#" }
+      ]
+    }
+  ]
+}
+```
+
+Assertions:
+
+| `assert` | Passes when |
+| :--- | :--- |
+| `blank` | the cell has no content (empty, or a formula returning `""`) |
+| `not_blank` | the cell has any content (an error value counts as content) |
+| `equals` | the cell's **displayed text** equals `value` (exact, case-sensitive) |
+| `not_contains` | the cell's **displayed text** does not contain `value` (substring) |
+
+`equals` and `not_contains` compare against the cell's *displayed* text
+(`Range.Text`) — what a user sees after number formatting — with no numeric tolerance.
+Write `value` to match the formatted display (e.g. a currency cell showing `$25.00`).
+A scenario counts as one "case"; a failure lists the assertion mismatch
+(`expected "…" got "…"`) in the result's failure table.
+
 ## Running
 
 ```powershell
 # 1. (dev only) build a sample workbook with protected inputs + error-prone formulas
 .\tools\New-SampleTestWorkbook.ps1
 
-# 2. run the harness
+# 2. run the harness (default: no_error property check)
 .\tools\Invoke-XlsmDevkitTest.ps1 -Workbook .\examples\test-harness\sample.xlsm
+
+# run a fixed-scenario spec instead (-TestPath is resolved from the current directory)
+.\tools\Invoke-XlsmDevkitTest.ps1 -Workbook .\examples\test-harness\sample.xlsm -TestPath .\examples\test-harness\tests\scenario.test.json
 ```
 
 Useful switches: `-Cases <n>` overrides the case count, `-Seed <n>` makes generation
@@ -180,9 +232,9 @@ the VBA public API are stable across phases, so later phases extend rather than 
 - **Phase 1 (MVP) -- implemented.** Cell role definitions (`workbook.meta.json`) plus the
   `no_error` property check. This release also adds `code_name` sheet references and
   Markdown fixtures.
-- **Phase 2 -- planned.** Fixed-scenario tests (`scenario` type) and the assertions
+- **Phase 2 -- implemented.** Fixed-scenario tests (`scenario` type) and the assertions
   `blank` / `not_blank` / `equals` / `not_contains` (e.g. "for male patients, the
-  obstetrics result cell must be blank").
+  obstetrics result cell must be blank"). See "Fixed-scenario tests" above.
 - **Phase 3 -- planned.** Full property-based testing: `within_range`, `matches_regex`,
   `all_blank_or_hidden`, plus failing-case shrinking.
 - **Phase 4 -- planned.** Snapshot regression using the existing sheet-map export
