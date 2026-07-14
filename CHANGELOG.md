@@ -4,6 +4,36 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.15.0] - 2026-07-15
+
+### Added
+- Testing harness Phase 3: property-based assertions and failing-case shrinking.
+  - New assertions `within_range`, `matches_regex`, and `all_blank_or_hidden`, usable in
+    both `scenario` and `property` tests. `within_range` reads the number from the cell's
+    displayed text with inclusive bounds (`min`/`max`); `all_blank_or_hidden` accepts a
+    multi-cell range and passes cells that are blank or in a hidden row/column. Implemented
+    in `devkit_Test.bas` (`EvalExpectation` + `DevkitAssertExpectations`).
+  - `matches_regex` evaluates a JavaScript-flavoured pattern (optional `ignore_case` /
+    `multiline`) via a new vendored, pure-VBA engine `src/devkit_Regex.bas`
+    (sihlfall/vba-regex, MIT) -- no VBScript / .NET / COM dependency. The `devkit_` prefix
+    means existing machinery skips it on import/export and strips it from releases.
+  - `tools/Invoke-XlsmDevkitTest.ps1` now checks all of a property test's `expect` blocks
+    per case (no_error + the new asserts) and, on failure, greedily **shrinks** the inputs
+    to a minimal counterexample (`-MaxShrinkSteps`, default 200; `-NoShrink` to disable).
+    result.md marks minimised cases `(shrunk)`.
+  - `examples/test-harness/tests/phase3_scenario.test.json` and `phase3_property.test.json`
+    sample specs; `New-SampleTestWorkbook.ps1` seeds matching outputs and imports
+    `devkit_Regex.bas`.
+
+### Fixed
+- Testing harness: a `blank` input into a merged cell no longer raises Excel error 1004
+  ("cannot change part of a merged cell"). `DevkitApplyInputs` now clears the target's
+  `MergeArea` for blank writes (previously reported `applied: 0`); non-merged cells are
+  unaffected and the merge structure is preserved. Value (`text`/`number`) writes still
+  target the exact cell, so a merged-cell input must address the top-left -- addressing a
+  non-top-left member lands in the hidden underlying cell and shows up as an assertion
+  failure rather than being silently absorbed.
+
 ## [1.14.0] - 2026-07-12
 
 ### Added

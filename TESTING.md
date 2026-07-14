@@ -179,12 +179,31 @@ each `expect` entry an `assert` and, where relevant, a `value`:
 
 Assertions:
 
-| `assert` | Passes when |
-| :--- | :--- |
-| `blank` | the cell has no content (empty, or a formula returning `""`) |
-| `not_blank` | the cell has any content (an error value counts as content) |
-| `equals` | the cell's **displayed text** equals `value` (exact, case-sensitive) |
-| `not_contains` | the cell's **displayed text** does not contain `value` (substring) |
+| `assert` | Extra fields | Passes when |
+| :--- | :--- | :--- |
+| `blank` | -- | the cell has no content (empty, or a formula returning `""`) |
+| `not_blank` | -- | the cell has any content (an error value counts as content) |
+| `equals` | `value` | the cell's **displayed text** equals `value` (exact, case-sensitive) |
+| `not_contains` | `value` | the cell's **displayed text** does not contain `value` (substring) |
+| `within_range` | `min` / `max` | the cell's **displayed text**, read as a number, is within `[min, max]` (**inclusive**) |
+| `matches_regex` | `pattern`, `ignore_case`, `multiline` | the cell's **displayed text** matches the regex `pattern` |
+| `all_blank_or_hidden` | -- | every cell in the (possibly multi-cell) target is blank or sits in a hidden row/column |
+
+The Phase 3 asserts (`within_range`, `matches_regex`, `all_blank_or_hidden`) work in both
+`scenario` and `property` tests. Notes:
+
+- **`within_range`** takes the number from the **displayed** text (`Range.Text`), not the
+  raw cell value. A cell showing `25.0` (a rounded display of `24.99`) therefore counts as
+  `>= 25` -- what the user sees. At least one of `min` / `max` is required; a missing bound
+  is unbounded on that side. Non-numeric displays fail.
+- **`matches_regex`** uses the vendored, pure-VBA **`devkit_Regex`** engine
+  ([sihlfall/vba-regex](https://github.com/sihlfall/vba-regex), MIT), which implements a
+  **JavaScript-flavoured** dialect (not .NET / not VBScript). `ignore_case` and `multiline`
+  are optional booleans; the match succeeds when the pattern is found anywhere in the text
+  (anchor with `^`/`$` for a full match). The target workbook must contain
+  `src/devkit_Regex.bas` (see Requirements).
+- **`all_blank_or_hidden`** accepts a multi-cell `address` (e.g. `A1:D50`); it fails on the
+  first cell that is both visible and non-blank.
 
 `equals` and `not_contains` compare against the cell's *displayed* text
 (`Range.Text`) — what a user sees after number formatting — with no numeric tolerance.
@@ -206,17 +225,31 @@ A scenario counts as one "case"; a failure lists the assertion mismatch
 ```
 
 Useful switches: `-Cases <n>` overrides the case count, `-Seed <n>` makes generation
-reproducible, `-MetaPath` / `-TestPath` point at non-default spec locations.
+reproducible, `-MetaPath` / `-TestPath` point at non-default spec locations,
+`-MaxShrinkSteps <n>` caps shrink re-runs (default 200), `-NoShrink` disables shrinking.
 
 The runner exits `1` when any case fails (so it slots into CI), and always writes
 `result.md` with a failure table (case, sheet, address, error, formula, inputs).
+
+### Failing-case shrinking (property tests)
+
+When a generated `property` case fails, the runner **minimises** the counterexample before
+recording it: greedily, one input at a time, it tries neutralising each input to blank and
+then `0`, keeping the change only while the **same** failing cell + assertion still
+reproduces. Iteration continues to a fixpoint, so `result.md` reports the smallest inputs
+that still break the property (marked `(shrunk)`), making the cause easier to see. Shrink
+re-runs share one budget across the whole run (`-MaxShrinkSteps`, default 200) so a run
+with many failures cannot explode Excel COM cost; `-NoShrink` turns it off. Shrinking
+applies to `property` tests only -- `scenario` inputs are fixed by definition.
 
 ### Requirements
 
 - Excel must be installed (the runner drives it through COM).
 - The workbook must contain `devkit_Test.bas`. Fixtures additionally require the core
   `xlsm_devkit.bas` module in the same workbook (it provides the reused `ParseMDTableRow`
-  / `UnescapeCellValue` helpers) -- normal dev workbooks already have it.
+  / `UnescapeCellValue` helpers) -- normal dev workbooks already have it. The
+  `matches_regex` assertion additionally requires `src/devkit_Regex.bas` (the vendored
+  pure-VBA engine); import it alongside `devkit_Test.bas` if you use `matches_regex`.
 - Building the sample workbook requires *Trust access to the VBA project object model*
   (Excel Options > Trust Center > Macro Settings).
 - The original workbook is never modified -- every run operates on a **work copy** placed
@@ -235,8 +268,11 @@ the VBA public API are stable across phases, so later phases extend rather than 
 - **Phase 2 -- implemented.** Fixed-scenario tests (`scenario` type) and the assertions
   `blank` / `not_blank` / `equals` / `not_contains` (e.g. "for male patients, the
   obstetrics result cell must be blank"). See "Fixed-scenario tests" above.
-- **Phase 3 -- planned.** Full property-based testing: `within_range`, `matches_regex`,
-  `all_blank_or_hidden`, plus failing-case shrinking.
+- **Phase 3 -- implemented.** Full property-based testing: the assertions `within_range`,
+  `matches_regex` (JS-flavoured, via the vendored MIT `devkit_Regex` engine) and
+  `all_blank_or_hidden`, usable in both `scenario` and `property` tests, plus failing-case
+  shrinking (`-MaxShrinkSteps` / `-NoShrink`). See the assertions table and "Failing-case
+  shrinking" above.
 - **Phase 4 -- planned.** Snapshot regression using the existing sheet-map export
   (`CallExportAllSheetMapsToMD`): `same_as_snapshot`, `changed_only_in_allowed_ranges`,
   combined with Git diff to judge whether a change moved expected values.

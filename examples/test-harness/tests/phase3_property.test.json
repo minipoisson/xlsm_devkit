@@ -1,0 +1,18 @@
+{
+  "tests": [
+    {
+      "name": "Total (B4) stays within [0, 100000] for any input",
+      "type": "property",
+      "inputs": [
+        { "role": "input" }
+      ],
+      "generate": {
+        "strategy": "boundary_and_random",
+        "cases": 20
+      },
+      "expect": [
+        { "sheet": "Result", "address": "B4", "assert": "within_range", "min": 0, "max": 100000 }
+      ]
+    }
+  ]
+}

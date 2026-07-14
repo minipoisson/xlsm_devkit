@@ -8,9 +8,14 @@
       - Sheet "Result" : formulas that reference Input, including two that can error:
             B2 = Input!B3 / Input!B2          -> #DIV/0! when quantity is 0 / blank
             B3 = VLOOKUP(Input!B2, table, ..) -> #N/A   when quantity is not 1/2/3
-      - Imports src\xlsm_devkit.bas and src\devkit_Test.bas into the workbook's VBProject
-        so the runner can call the Devkit* API via Application.Run. (devkit_Test reuses
-        Public helpers from xlsm_devkit.bas, so both modules must be present.)
+      - Imports src\xlsm_devkit.bas, src\devkit_Test.bas and src\devkit_Regex.bas into the
+        workbook's VBProject so the runner can call the Devkit* API via Application.Run.
+        (devkit_Test reuses Public helpers from xlsm_devkit.bas; matches_regex uses
+        devkit_Regex, so all three modules must be present.)
+      - Extra Phase 3 outputs: B8 = a "Qnnn" code string (matches_regex target), the
+        Total B4 (within_range target), a naturally-blank block J1:J3, and the hidden
+        lookup columns E:F (all_blank_or_hidden hidden-branch demo). A spare unlocked
+        Input!B4 gives shrinking an input it can neutralise.
 
     ASCII-only sheet names (the role mechanism is language-independent), which keeps
     PowerShell free of encoding pitfalls.
@@ -36,8 +41,10 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 # UnescapeCellValue), so the core module must be present in the workbook too.
 $coreSrc = Join-Path $repoRoot 'src\xlsm_devkit.bas'
 $moduleSrc = Join-Path $repoRoot 'src\devkit_Test.bas'
+$regexSrc = Join-Path $repoRoot 'src\devkit_Regex.bas'
 if (-not (Test-Path -LiteralPath $coreSrc)) { throw "xlsm_devkit.bas not found: $coreSrc" }
 if (-not (Test-Path -LiteralPath $moduleSrc)) { throw "devkit_Test.bas not found: $moduleSrc" }
+if (-not (Test-Path -LiteralPath $regexSrc)) { throw "devkit_Regex.bas not found: $regexSrc" }
 
 if ([string]::IsNullOrWhiteSpace($OutPath)) {
     $OutPath = Join-Path $repoRoot 'examples\test-harness\sample.xlsm'
@@ -72,10 +79,12 @@ try {
     $wsIn.Range('B1').Value2 = 'Value'
     $wsIn.Range('A2').Value2 = 'Quantity'
     $wsIn.Range('A3').Value2 = 'Unit Price'
+    $wsIn.Range('A4').Value2 = 'Spare (unused input)'
     $wsIn.Range('B2').Value2 = 1
     $wsIn.Range('B3').Value2 = 100
-    # Unlock the two input cells, then protect the sheet.
-    $wsIn.Range('B2:B3').Locked = $false
+    # Unlock the input cells (including a spare B4 that no result formula reads, so
+    # shrinking has an input it can neutralise), then protect the sheet.
+    $wsIn.Range('B2:B4').Locked = $false
     $wsIn.Protect()
 
     # --- Result sheet --------------------------------------------------------
@@ -95,10 +104,20 @@ try {
     $wsRes.Range('E3').Value2 = 2; $wsRes.Range('F3').Value2 = 20
     $wsRes.Range('E4').Value2 = 3; $wsRes.Range('F4').Value2 = 30
 
-    # --- Import the core + test modules into the VBProject -------------------
+    # --- Phase 3 assertion targets ------------------------------------------
+    # matches_regex: a "Qnnn" code string derived from the quantity.
+    $wsRes.Range('A8').Value2 = 'Code'
+    $wsRes.Range('B8').Formula = '="Q"&TEXT(Input!B2,"000")'
+    # all_blank_or_hidden: hide the lookup columns E:F so a non-blank but hidden range
+    # still passes; J1:J3 is left naturally blank for the blank branch.
+    $wsRes.Columns('E:F').Hidden = $true
+
+    # --- Import the core + test + regex modules into the VBProject -----------
     # Core first: devkit_Test calls its Public ParseMDTableRow / UnescapeCellValue.
+    # devkit_Regex provides the matches_regex engine used by devkit_Test.
     try {
         $null = $wb.VBProject.VBComponents.Import($coreSrc)
+        $null = $wb.VBProject.VBComponents.Import($regexSrc)
         $null = $wb.VBProject.VBComponents.Import($moduleSrc)
     } catch {
         throw "Could not import modules into the VBProject. Enable " +

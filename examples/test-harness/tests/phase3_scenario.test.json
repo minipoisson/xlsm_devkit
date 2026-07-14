@@ -1,0 +1,23 @@
+{
+  "tests": [
+    {
+      "name": "Phase 3 asserts pass for quantity=2, price=50",
+      "type": "scenario",
+      "fixtures": [
+        { "sheet": "Result", "md_file": "tests/fixtures/seed.md" }
+      ],
+      "inputs": [
+        { "sheet": "Input", "address": "B2", "value": "2",  "type": "number" },
+        { "sheet": "Input", "address": "B3", "value": "50", "type": "number" }
+      ],
+      "expect": [
+        { "sheet": "Result", "address": "B4", "assert": "within_range", "min": 0, "max": 1000 },
+        { "sheet": "Result", "address": "B4", "assert": "within_range", "min": 100, "max": 100 },
+        { "sheet": "Result", "address": "B8", "assert": "matches_regex", "pattern": "^Q\\d{3}$" },
+        { "sheet": "Result", "address": "B8", "assert": "matches_regex", "pattern": "^q\\d{3}$", "ignore_case": true },
+        { "sheet": "Result", "address": "J1:J3",  "assert": "all_blank_or_hidden" },
+        { "sheet": "Result", "address": "E1:F4",  "assert": "all_blank_or_hidden" }
+      ]
+    }
+  ]
+}

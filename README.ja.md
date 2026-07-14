@@ -92,6 +92,11 @@ Excel エラー（`#DIV/0!`, `#N/A` など）が出ないか」**。
   `test-results/latest/result.{json,md}` に出力。
 - シートはタブ名（`sheet`）または VBA の `code_name` で指定可能。テスト前に Markdown の
   `fixtures` でセルへ値・数式を流し込めます。
+- `no_error` 以外の検証も可能: 固定シナリオ（**scenario**）と生成的プロパティ
+  （**property**）の両方で `equals` / `blank` / `not_blank` / `not_contains` /
+  `within_range` / `matches_regex` / `all_blank_or_hidden` を判定でき、失敗した
+  プロパティケースは最小反例まで自動縮小されます。（`matches_regex` は同梱の
+  純VBA `devkit_Regex.bas` を使用。）
 - 原本ブックは一切変更しません（毎回ブックフォルダ内の作業コピーで実行＝ブックの信頼できる
   場所を継承）。
 

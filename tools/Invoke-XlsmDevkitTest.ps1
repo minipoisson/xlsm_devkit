@@ -45,6 +45,8 @@ param(
     [string]$TestPath,
     [int]$Cases = 0,
     [int]$Seed = 0,
+    [int]$MaxShrinkSteps = 200,
+    [switch]$NoShrink,
     [switch]$AllowDestructive
 )
 
@@ -131,6 +133,135 @@ function Invoke-TestFixtures($xl, [string]$prefix, $test, [string]$wbFolder) {
         if ($null -ne ($fxRes.PSObject.Properties['error'])) { throw "DevkitApplyFixture failed: $($fxRes.error)" }
         Write-Host "  fixtures: applied $($fxRes.applied) cell(s)."
     }
+}
+
+# Build one case's DevkitApplyInputs payload from a list of input hashtables
+# (each carries value/type plus a sheet/code_name + address/range reference).
+function New-ApplyInputs($caseInputs) {
+    @($caseInputs | ForEach-Object {
+        $o = @{ value = $_.value; type = $_.type }
+        if ($_.code_name) { $o.code_name = $_.code_name }
+        if ($_.sheet)     { $o.sheet = $_.sheet }
+        if ($_.address)   { $o.address = $_.address }
+        if ($_.range)     { $o.range = $_.range }
+        $o
+    })
+}
+
+# Apply a case's inputs and recalculate. Throws on a VBA-side error.
+function Invoke-ApplyAndCalc($xl, [string]$prefix, $caseInputs) {
+    $applyJson = ConvertTo-Json @{ inputs = (New-ApplyInputs $caseInputs) } -Depth 6 -Compress
+    $applyRes = $xl.Run($prefix + 'DevkitApplyInputs', $applyJson) | ConvertFrom-Json
+    if ($null -ne ($applyRes.PSObject.Properties['error'])) { throw "DevkitApplyInputs failed: $($applyRes.error)" }
+    $null = $xl.Run($prefix + 'DevkitCalculateFullRebuild') | ConvertFrom-Json
+}
+
+# Split a property test's `expect` blocks into the two VBA payloads used per case:
+#   no_error targets       -> DevkitAssertNoErrors ({ targets: [...] })
+#   parameterised asserts  -> DevkitAssertExpectations ({ expectations: [...] })
+# Returns @{ NoError = <json|null>; Expectations = <json|null> }; the payloads are
+# static for a test, so this is computed once and reused for every case + shrink step.
+function Get-CaseAssertPayloads($test) {
+    $noErr = New-Object System.Collections.ArrayList
+    $exps  = New-Object System.Collections.ArrayList
+    foreach ($exp in @(Get-Prop $test 'expect')) {
+        $assert = Resolve-Default (Get-Prop $exp 'assert') 'no_error'
+        $sheet = Get-Prop $exp 'sheet'; $code = Get-Prop $exp 'code_name'
+        if ($assert -eq 'no_error') {
+            $t = @{}
+            if ($code)  { $t.code_name = $code }
+            if ($sheet) { $t.sheet = $sheet }
+            $used = Get-Prop $exp 'used_range'; $range = Get-Prop $exp 'range'
+            if ($used) { $t.used_range = $true }
+            elseif ($range) { $t.range = $range }
+            else { $t.used_range = $true }
+            [void]$noErr.Add($t)
+        }
+        else {
+            $e = @{ assert = $assert }
+            if ($code)  { $e.code_name = $code }
+            if ($sheet) { $e.sheet = $sheet }
+            $addr = Get-Prop $exp 'address'; $range = Get-Prop $exp 'range'
+            if ($addr) { $e.address = $addr } elseif ($range) { $e.address = $range }
+            foreach ($k in 'min','max','pattern') {
+                $v = Get-Prop $exp $k; if ($null -ne $v) { $e[$k] = $v }
+            }
+            foreach ($k in 'ignore_case','multiline') {
+                $v = Get-Prop $exp $k; if ($null -ne $v) { $e[$k] = [bool]$v }
+            }
+            [void]$exps.Add($e)
+        }
+    }
+    $noErrJson = $null
+    if ($noErr.Count -gt 0) { $noErrJson = ConvertTo-Json @{ targets = @($noErr) } -Depth 6 -Compress }
+    $expJson = $null
+    if ($exps.Count -gt 0) { $expJson = ConvertTo-Json @{ expectations = @($exps) } -Depth 6 -Compress }
+    return @{ NoError = $noErrJson; Expectations = $expJson }
+}
+
+# Evaluate all of a property test's assertions against the current calculated state and
+# return a flat failure list (@{ sheet; address; assert; error; formula }). Reused by both
+# the main case loop and the shrink loop so "still reproduces" is judged identically.
+function Test-CaseExpectations($xl, [string]$prefix, [string]$noErrorJson, [string]$expectationsJson) {
+    $out = New-Object System.Collections.ArrayList
+    if ($noErrorJson) {
+        $r = $xl.Run($prefix + 'DevkitAssertNoErrors', $noErrorJson) | ConvertFrom-Json
+        if ($null -ne ($r.PSObject.Properties['error'])) { throw "DevkitAssertNoErrors failed: $($r.error)" }
+        foreach ($f in @($r.failures)) {
+            [void]$out.Add(@{ sheet = $f.sheet; address = $f.address; assert = 'no_error';
+                              error = $f.error; formula = $f.formula })
+        }
+    }
+    if ($expectationsJson) {
+        $r = $xl.Run($prefix + 'DevkitAssertExpectations', $expectationsJson) | ConvertFrom-Json
+        if ($null -ne ($r.PSObject.Properties['error'])) { throw "DevkitAssertExpectations failed: $($r.error)" }
+        foreach ($f in @($r.failures)) {
+            [void]$out.Add(@{ sheet = $f.sheet; address = $f.address; assert = $f.assert;
+                              error = $f.error; formula = $f.formula })
+        }
+    }
+    return @($out)
+}
+
+# Signature identifying one failing assertion, so shrinking can check a specific
+# counterexample "still reproduces" after neutralising an input.
+function Get-FailSig($f) { "$($f.sheet)|$($f.address)|$($f.assert)" }
+
+# Greedily minimise a failing case: for each input position, try neutralising it to
+# blank then 0, keeping the change only while the ORIGINAL counterexample (first failure)
+# still reproduces. Iterates to a fixpoint under a shared re-run budget. Leaves the
+# workbook in the minimised failing state and returns the minimised inputs + its failures.
+function Invoke-CaseShrink($xl, [string]$prefix, $caseInputs, [string]$noErrorJson, [string]$expJson, $initialFailures, [ref]$budget) {
+    $sig = Get-FailSig $initialFailures[0]
+    $neutrals = @( @{ value = '';  type = 'blank'  },
+                   @{ value = '0'; type = 'number' } )
+    # Working copy (clone each hashtable so we never mutate the caller's inputs).
+    $cur = @($caseInputs | ForEach-Object { $_.Clone() })
+    $reduced = $false
+    # Single greedy pass: finalise each input position once to the most-neutral value
+    # (blank preferred over 0) that still reproduces the counterexample, then move on.
+    # `$neutrals` is ordered most-neutral first, so once the current value already equals
+    # a candidate we stop -- nothing later in the list is more neutral. Finalising each
+    # position exactly once guarantees termination (no blank<->0 oscillation).
+    for ($p = 0; $p -lt $cur.Count -and $budget.Value -gt 0; $p++) {
+        foreach ($neu in $neutrals) {
+            if ($cur[$p].value -eq $neu.value -and $cur[$p].type -eq $neu.type) { break }
+            if ($budget.Value -le 0) { break }
+            $trial = @($cur | ForEach-Object { $_.Clone() })
+            $trial[$p].value = $neu.value
+            $trial[$p].type  = $neu.type
+            $budget.Value--
+            Invoke-ApplyAndCalc $xl $prefix $trial
+            $f = @(Test-CaseExpectations $xl $prefix $noErrorJson $expJson)
+            $stillFails = $false
+            foreach ($ff in $f) { if ((Get-FailSig $ff) -eq $sig) { $stillFails = $true; break } }
+            if ($stillFails) { $cur = $trial; $reduced = $true; break }
+        }
+    }
+    # Restore the minimised state (the last trial applied may have been a rejected one).
+    Invoke-ApplyAndCalc $xl $prefix $cur
+    $finalFailures = @(Test-CaseExpectations $xl $prefix $noErrorJson $expJson)
+    return @{ Inputs = $cur; Failures = $finalFailures; Reduced = $reduced }
 }
 
 # ---------------------------------------------------------------------------
@@ -226,6 +357,9 @@ try {
     $failures = New-Object System.Collections.ArrayList
     $totalCases = 0
     $failedCases = 0
+    # Shared shrink budget: re-runs are deducted across every failing property case so a
+    # run with many failures cannot explode Excel COM cost.
+    $shrinkBudget = $MaxShrinkSteps
 
     foreach ($test in @(Get-Prop $testSpec 'tests')) {
         $testType = Resolve-Default (Get-Prop $test 'type') 'property'
@@ -262,9 +396,18 @@ try {
                 if ($eCode)  { $e.code_name = $eCode }
                 if ($eSheet) { $e.sheet = $eSheet }
                 $eAddr = Get-Prop $_ 'address'; if ($eAddr) { $e.address = $eAddr }
+                $eRange = Get-Prop $_ 'range'; if (-not $eAddr -and $eRange) { $e.address = $eRange }
                 $eAssert = Get-Prop $_ 'assert'; if ($eAssert) { $e.assert = $eAssert }
                 # value is compared as displayed text, so serialize it as a string.
                 if ($null -ne $_.PSObject.Properties['value']) { $e.value = [string](Get-Prop $_ 'value') }
+                # Phase 3 parameterised asserts: within_range (min/max), matches_regex
+                # (pattern + optional ignore_case / multiline).
+                foreach ($k in 'min','max','pattern') {
+                    $v = Get-Prop $_ $k; if ($null -ne $v) { $e[$k] = $v }
+                }
+                foreach ($k in 'ignore_case','multiline') {
+                    $v = Get-Prop $_ $k; if ($null -ne $v) { $e[$k] = [bool]$v }
+                }
                 $e
             })
             $expJson = ConvertTo-Json @{ expectations = @($expList) } -Depth 6 -Compress
@@ -292,22 +435,11 @@ try {
                 throw "No input cells resolved for property test '$testName'. Check meta.json roles / unlocked cells."
             }
 
-            # Assertion targets from this test's expect blocks (no_error over ranges).
-            $assertTargets = New-Object System.Collections.ArrayList
-            foreach ($exp in @(Get-Prop $test 'expect')) {
-                $t = @{}
-                $expSheet = Get-Prop $exp 'sheet'
-                $expCode  = Get-Prop $exp 'code_name'
-                if ($expCode)  { $t.code_name = $expCode }
-                if ($expSheet) { $t.sheet = $expSheet }
-                $expUsed = Get-Prop $exp 'used_range'
-                $expRange = Get-Prop $exp 'range'
-                if ($expUsed) { $t.used_range = $true }
-                elseif ($expRange) { $t.range = $expRange }
-                else { $t.used_range = $true }
-                [void]$assertTargets.Add($t)
-            }
-            $assertJson = ConvertTo-Json @{ targets = @($assertTargets) } -Depth 6 -Compress
+            # Per-case assertion payloads from this test's expect blocks: no_error targets
+            # go to DevkitAssertNoErrors, parameterised asserts (within_range /
+            # matches_regex / all_blank_or_hidden) to DevkitAssertExpectations. Static for
+            # the test, so computed once and reused for every case + shrink step.
+            $payloads = Get-CaseAssertPayloads $test
 
             # Case count: -Cases override, else generate.cases, else 50.
             $caseCount = $Cases
@@ -342,28 +474,23 @@ try {
             $caseNo = 0
             foreach ($ci in $caseList) {
                 $caseNo++
-                $applyInputs = @($ci | ForEach-Object {
-                    $o = @{ value = $_.value; type = $_.type }
-                    if ($_.code_name) { $o.code_name = $_.code_name }
-                    if ($_.sheet)     { $o.sheet = $_.sheet }
-                    if ($_.address)   { $o.address = $_.address }
-                    if ($_.range)     { $o.range = $_.range }
-                    $o
-                })
-                $applyJson = ConvertTo-Json @{ inputs = $applyInputs } -Depth 6 -Compress
+                Invoke-ApplyAndCalc $xl $runPrefix $ci
+                # @() guards against PowerShell unwrapping a 0- or 1-element result.
+                $caseFailures = @(Test-CaseExpectations $xl $runPrefix $payloads.NoError $payloads.Expectations)
 
-                $applyRes = $xl.Run($runPrefix + 'DevkitApplyInputs', $applyJson) | ConvertFrom-Json
-                if ($null -ne ($applyRes.PSObject.Properties['error'])) { throw "DevkitApplyInputs failed: $($applyRes.error)" }
-
-                $null = $xl.Run($runPrefix + 'DevkitCalculateFullRebuild') | ConvertFrom-Json
-
-                $assertRes = $xl.Run($runPrefix + 'DevkitAssertNoErrors', $assertJson) | ConvertFrom-Json
-                if ($null -ne ($assertRes.PSObject.Properties['error'])) { throw "DevkitAssertNoErrors failed: $($assertRes.error)" }
-
-                if ([int]$assertRes.failCount -gt 0) {
+                if ($caseFailures.Count -gt 0) {
                     $failedCases++
-                    $summary = Format-InputsSummary $ci
-                    foreach ($f in @($assertRes.failures)) {
+                    $recordInputs = $ci
+                    $recordFailures = $caseFailures
+                    $note = ''
+                    if (-not $NoShrink -and $shrinkBudget -gt 0) {
+                        $sr = Invoke-CaseShrink $xl $runPrefix $ci $payloads.NoError $payloads.Expectations $caseFailures ([ref]$shrinkBudget)
+                        $recordInputs = $sr.Inputs
+                        $recordFailures = $sr.Failures
+                        if ($sr.Reduced) { $note = ' (shrunk)' }
+                    }
+                    $summary = (Format-InputsSummary $recordInputs) + $note
+                    foreach ($f in @($recordFailures)) {
                         if ($failures.Count -lt 200) {
                             [void]$failures.Add(@{
                                 case = $caseNo; inputs = $summary;

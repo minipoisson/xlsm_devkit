@@ -28,10 +28,18 @@ Option Explicit
 '   DevkitApplyInputs(inputsJson)    -> write values into target cells
 '   DevkitCalculateFullRebuild()     -> Application.CalculateFullRebuild
 '   DevkitAssertNoErrors(targetJson) -> scan targets for Excel error values
-'   DevkitAssertExpectations(json)   -> check fixed-scenario expectations per cell
+'   DevkitAssertExpectations(json)   -> check per-cell expectations (scenario + property)
 '   DevkitWriteResult(resultJson)    -> write result.json + result.md
+'
+' Assertions understood by DevkitAssertExpectations / EvalExpectation:
+'   blank / not_blank / equals / not_contains  (Phase 2)
+'   within_range        -> displayed-text number is within [min, max], inclusive (Phase 3)
+'   matches_regex       -> displayed text matches a JS-flavoured regex (Phase 3;
+'                          pattern + optional ignore_case / multiline; engine = devkit_Regex)
+'   all_blank_or_hidden -> every cell in the (possibly multi-cell) target is blank or
+'                          lives in a hidden row/column (Phase 3)
 
-Private Const DEVKIT_TEST_VERSION As String = "0.2.0"
+Private Const DEVKIT_TEST_VERSION As String = "0.3.0"
 
 ' ===== JSON parser state (module-level; one parse at a time) =====
 Private mJson As String
@@ -283,8 +291,10 @@ Public Function DevkitAssertExpectations(ByVal expectationsJson As String) As St
         ElseIf target Is Nothing Then
             ok = False: reason = "bad address"
         Else
-            actual = CStr(target.Text)
-            ok = EvalExpectation(target, asrt, expected, actual, reason)
+            ' Range.Text is Null for a multi-cell range with differing cells; only the
+            ' range-aware asserts (all_blank_or_hidden) use a multi-cell target.
+            If target.Cells.Count = 1 Then actual = CStr(target.Text) Else actual = ""
+            ok = EvalExpectation(target, it, asrt, expected, actual, reason)
         End If
 
         If Not ok Then
@@ -467,14 +477,20 @@ Private Function ApplyValueToRange(ByVal target As Range, ByVal vtype As String,
     Err.Clear
     Select Case vtype
         Case "blank"
-            target.ClearContents
+            ' ClearContents on part of a merged region raises 1004 even at the top-left,
+            ' so clear the whole MergeArea. For a non-merged cell MergeArea is the cell
+            ' itself. The text/number writes below deliberately keep the exact target (not
+            ' MergeArea): a merged-cell input should address the top-left, and a write to a
+            ' non-top-left member lands in the hidden underlying cell, so the mistake shows
+            ' up as an assertion failure rather than being silently absorbed by MergeArea.
+            target.MergeArea.ClearContents
         Case "text"
             target.Value = "'" & vval
         Case "number"
             target.Value = Val(vval)
         Case Else
             If vval = "" Then
-                target.ClearContents
+                target.MergeArea.ClearContents
             ElseIf IsNumeric(vval) Then
                 target.Value = Val(vval)
             Else
@@ -486,10 +502,11 @@ Private Function ApplyValueToRange(ByVal target As Range, ByVal vtype As String,
     ApplyValueToRange = ok
 End Function
 
-' Evaluates one scenario expectation against a resolved cell. Sets `actual` to the
-' displayed text and, on failure, `reason` to a human-readable mismatch message.
-' Returns True when the assertion holds.
-Private Function EvalExpectation(ByVal target As Range, ByVal asrt As String, _
+' Evaluates one expectation against a resolved target. `actual` is the displayed text
+' (empty for a multi-cell target); `it` is the raw expectation dictionary, from which the
+' parameterised asserts read min / max / pattern / ignore_case / multiline. On failure,
+' `reason` is set to a human-readable mismatch message. Returns True when the assertion holds.
+Private Function EvalExpectation(ByVal target As Range, ByVal it As Object, ByVal asrt As String, _
                                  ByVal expected As String, ByRef actual As String, _
                                  ByRef reason As String) As Boolean
     Select Case asrt
@@ -519,9 +536,118 @@ Private Function EvalExpectation(ByVal target As Range, ByVal asrt As String, _
             Else
                 reason = "not_contains: " & QuoteVal(expected) & " found in " & QuoteVal(actual)
             End If
+        Case "within_range"
+            EvalExpectation = EvalWithinRange(target, it, actual, reason)
+        Case "matches_regex"
+            EvalExpectation = EvalMatchesRegex(target, it, actual, reason)
+        Case "all_blank_or_hidden"
+            EvalExpectation = EvalAllBlankOrHidden(target, reason)
         Case Else
             reason = "unknown assert: " & asrt
     End Select
+End Function
+
+' within_range: the target's displayed text, parsed as a number, must lie in [min, max]
+' with inclusive bounds. At least one of min / max is required; a missing bound is
+' unbounded on that side. The number is taken from the DISPLAYED text (Range.Text) so a
+' cell showing "25.0" (a rounded display of 24.99) counts as >= 25 -- what the user sees.
+Private Function EvalWithinRange(ByVal target As Range, ByVal it As Object, _
+                                 ByVal actual As String, ByRef reason As String) As Boolean
+    If target.Cells.Count > 1 Then reason = "within_range: expects a single cell": Exit Function
+    Dim n As Double
+    If Not ParseDisplayNumber(actual, n) Then
+        reason = "within_range: not numeric: " & QuoteVal(actual): Exit Function
+    End If
+    Dim hasMin As Boolean, hasMax As Boolean
+    hasMin = it.Exists("min"): hasMax = it.Exists("max")
+    If Not hasMin And Not hasMax Then reason = "within_range: needs min and/or max": Exit Function
+    Dim vMin As Double, vMax As Double
+    If hasMin Then vMin = CDbl(it("min"))
+    If hasMax Then vMax = CDbl(it("max"))
+    If hasMin And n < vMin Then
+        reason = "within_range: " & NumPlain(n) & " < min " & NumPlain(vMin): Exit Function
+    End If
+    If hasMax And n > vMax Then
+        reason = "within_range: " & NumPlain(n) & " > max " & NumPlain(vMax): Exit Function
+    End If
+    EvalWithinRange = True
+End Function
+
+' matches_regex: the target's displayed text must match the JS-flavoured `pattern`
+' evaluated by the vendored devkit_Regex engine. ignore_case / multiline are optional flags.
+Private Function EvalMatchesRegex(ByVal target As Range, ByVal it As Object, _
+                                  ByVal actual As String, ByRef reason As String) As Boolean
+    If target.Cells.Count > 1 Then reason = "matches_regex: expects a single cell": Exit Function
+    Dim pat As String
+    If it.Exists("pattern") Then pat = CStr(it("pattern"))
+    If Len(pat) = 0 Then reason = "matches_regex: empty pattern": Exit Function
+    Dim rxErr As String: rxErr = ""
+    If DevkitRegexIsMatch(actual, pat, HasTrue(it, "ignore_case"), HasTrue(it, "multiline"), rxErr) Then
+        EvalMatchesRegex = True
+    ElseIf Len(rxErr) > 0 Then
+        reason = "matches_regex: /" & pat & "/ " & rxErr
+    Else
+        reason = "matches_regex: /" & pat & "/ did not match " & QuoteVal(actual)
+    End If
+End Function
+
+' all_blank_or_hidden: every cell in the (possibly multi-cell) target must be blank or
+' sit in a hidden row / column. Fails on the first visible, non-blank cell.
+Private Function EvalAllBlankOrHidden(ByVal target As Range, ByRef reason As String) As Boolean
+    Dim c As Range
+    For Each c In target.Cells
+        If Not CellIsBlank(c) Then
+            If Not (c.EntireRow.Hidden Or c.EntireColumn.Hidden) Then
+                reason = "all_blank_or_hidden: " & c.Address(False, False) & _
+                         " is visible = " & QuoteVal(CStr(c.Text))
+                Exit Function
+            End If
+        End If
+    Next c
+    EvalAllBlankOrHidden = True
+End Function
+
+' Parses a number out of a cell's displayed text. Strips a leading currency symbol,
+' grouping separators, a parenthesised-negative wrapper, and a trailing percent sign,
+' then reads the result with Val (locale-independent, '.'-decimal). A percent display
+' keeps its shown magnitude ("25%" -> 25). Returns False when no number can be read.
+Private Function ParseDisplayNumber(ByVal text As String, ByRef n As Double) As Boolean
+    Dim s As String: s = Trim(text)
+    If Len(s) = 0 Then Exit Function
+    Dim neg As Boolean
+    If Left(s, 1) = "(" And Right(s, 1) = ")" Then neg = True: s = Mid(s, 2, Len(s) - 2)
+    If Right(s, 1) = "%" Then s = Left(s, Len(s) - 1)
+    Dim i As Long, ch As String, cleaned As String, hasDigit As Boolean
+    For i = 1 To Len(s)
+        ch = Mid(s, i, 1)
+        Select Case ch
+            Case "0" To "9": cleaned = cleaned & ch: hasDigit = True
+            Case ".", "-", "+": cleaned = cleaned & ch
+            Case ",", " ", vbTab    ' grouping separators / spaces -> drop
+            Case Else                ' currency symbols, letters, etc. -> drop
+        End Select
+    Next i
+    If Not hasDigit Then Exit Function
+    n = Val(cleaned)
+    If neg Then n = -n
+    ParseDisplayNumber = True
+End Function
+
+' Thin wrapper over the vendored devkit_Regex engine. Returns True when `text` matches
+' `pattern`. On an invalid pattern or a runtime failure, returns False and sets `errMsg`.
+Private Function DevkitRegexIsMatch(ByVal text As String, ByVal pattern As String, _
+                                    ByVal ignoreCase As Boolean, ByVal multiLine As Boolean, _
+                                    ByRef errMsg As String) As Boolean
+    On Error GoTo EH
+    Dim re As RegexTy
+    If Not devkit_Regex.TryInitializeRegex(re, pattern, ignoreCase) Then
+        errMsg = "invalid pattern"
+        Exit Function
+    End If
+    DevkitRegexIsMatch = devkit_Regex.Test(re, text, multiLine)
+    Exit Function
+EH:
+    errMsg = "regex error: " & Err.Description
 End Function
 
 ' True when a cell has no content. An error value counts as content (not blank);

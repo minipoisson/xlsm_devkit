@@ -94,6 +94,11 @@ free of Excel errors (`#DIV/0!`, `#N/A`, ...)?**
   written to `test-results/latest/result.{json,md}`.
 - Sheets can be referenced by tab name (`sheet`) or VBA `code_name`; tests can seed cells
   before the run via Markdown `fixtures`.
+- Assertions go beyond `no_error`: fixed **scenario** tests and generative **property**
+  tests can check `equals` / `blank` / `not_blank` / `not_contains` / `within_range` /
+  `matches_regex` / `all_blank_or_hidden`, and failing property cases are automatically
+  shrunk to a minimal counterexample. (`matches_regex` uses the bundled pure-VBA
+  `devkit_Regex.bas`.)
 - The original workbook is never modified (every run uses a work copy under the workbook
   folder, so it inherits the workbook's Excel trusted location).
 
