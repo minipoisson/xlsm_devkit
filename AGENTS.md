@@ -107,7 +107,9 @@ Prefer late binding (`CreateObject`) so the code does not require a reference ad
 
 ## Release management
 
-When `xlsm_devkit.bas` has changed since the last release, create a new GitHub release:
+When a released source module has changed since the last release -- the core
+`xlsm_devkit.bas` **or** an optional harness module (`src/devkit_*.bas`) -- create a new
+GitHub release:
 
 1. **Determine the version** using Semantic Versioning based on the `[Unreleased]` section of `CHANGELOG.md`:
    - New feature added → bump MINOR (e.g. `1.0.x` → `1.1.0`)
@@ -121,12 +123,15 @@ When `xlsm_devkit.bas` has changed since the last release, create a new GitHub r
    git tag vX.Y.Z
    git push origin main
    git push origin vX.Y.Z
-   gh release create vX.Y.Z "src/xlsm_devkit.bas#xlsm_devkit.bas" \
+   gh release create vX.Y.Z \
      --title "vX.Y.Z" \
      --notes "<content of the new CHANGELOG section>"
    ```
 
-4. **Always attach `xlsm_devkit.bas`** as a release asset so users can download it directly without cloning the repository.
+4. **Do not attach individual `.bas` files.** The modules are interdependent (the optional
+   `devkit_*` modules are useless without the core, and vice versa), so a partial asset set
+   is misleading. Rely on GitHub's auto-generated **Source code (zip / tar.gz)** archives,
+   which contain the whole repository at the tag; users extract the module(s) they need.
 
 ---
 
